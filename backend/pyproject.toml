@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.4",
     "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7",
+    "bcrypt<5.0",
     "websockets>=12.0",
 ]
 
