@@ -76,3 +76,10 @@ async def test_server():
 
     for server in servers:
         await server.stop()
+
+
+@pytest_asyncio.fixture
+async def session(db_engine):
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as s:
+        yield s
