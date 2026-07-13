@@ -52,3 +52,21 @@ async def test_create_package_target_dir_is_safe_even_with_malicious_name(auth_c
     # never derived from (and never escaping via) the user-supplied name.
     assert ".." not in target_dir
     assert target_dir == os.path.join(download_root, body["id"])
+
+
+@pytest.mark.asyncio
+async def test_list_packages(auth_client):
+    auth_client.post("/packages", json={"name": "Pkg A", "urls": ["https://example.com/a.zip"]})
+    auth_client.post("/packages", json={"name": "Pkg B", "urls": ["https://example.com/b.zip"]})
+
+    response = auth_client.get("/packages")
+
+    assert response.status_code == 200
+    names = {pkg["name"] for pkg in response.json()}
+    assert names == {"Pkg A", "Pkg B"}
+
+
+@pytest.mark.asyncio
+async def test_list_packages_requires_auth(client):
+    response = client.get("/packages")
+    assert response.status_code == 401

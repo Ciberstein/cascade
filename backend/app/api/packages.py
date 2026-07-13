@@ -20,6 +20,15 @@ def _filename_from_url(url: str) -> str:
     return name or "download"
 
 
+@router.get("", response_model=list[PackageResponse])
+async def list_packages(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    result = await db.execute(select(Package).options(selectinload(Package.items)))
+    return result.scalars().all()
+
+
 @router.post("", response_model=PackageResponse, status_code=status.HTTP_201_CREATED)
 async def create_package(
     payload: CreatePackageRequest,
