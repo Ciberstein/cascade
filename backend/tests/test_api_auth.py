@@ -81,3 +81,26 @@ async def test_get_or_create_admin_recovers_from_concurrent_insert(db_engine):
         result = await verify_session.execute(select(User).where(User.username == "admin"))
         users = result.scalars().all()
         assert len(users) == 1
+
+
+@pytest.mark.asyncio
+async def test_me_requires_auth(client):
+    response = client.get("/auth/me")
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_me_returns_user_when_authenticated(client):
+    client.post("/auth/login", json={"username": "admin", "password": "hunter2"})
+    response = client.get("/auth/me")
+
+    assert response.status_code == 200
+    assert response.json()["username"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_me_rejects_garbage_cookie(client):
+    client.cookies.set("access_token", "not-a-valid-jwt")
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401

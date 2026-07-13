@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.dependencies import get_current_user
 from app.auth.security import create_access_token, hash_password, verify_password
 from app.config import Settings
 from app.database import get_db
@@ -50,3 +51,8 @@ async def login(payload: LoginRequest, response: Response, db: AsyncSession = De
         max_age=_settings.jwt_expire_minutes * 60,
     )
     return LoginResponse()
+
+
+@router.get("/me")
+async def me(user: User = Depends(get_current_user)) -> dict[str, str]:
+    return {"username": user.username}
