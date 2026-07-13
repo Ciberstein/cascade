@@ -57,12 +57,16 @@ async def test_server():
         support_range: bool = True,
         fail_first_n: int = 0,
         ignore_range: bool = False,
+        head_status: int = 200,
+        omit_content_length: bool = False,
     ):
         server = FlakyTestServer(
             payload,
             support_range=support_range,
             fail_first_n=fail_first_n,
             ignore_range=ignore_range,
+            head_status=head_status,
+            omit_content_length=omit_content_length,
         )
         url = await server.start()
         servers.append(server)

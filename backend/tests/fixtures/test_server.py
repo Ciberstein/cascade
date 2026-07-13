@@ -10,6 +10,8 @@ class FlakyTestServer:
         support_range: bool = True,
         fail_first_n: int = 0,
         ignore_range: bool = False,
+        head_status: int = 200,
+        omit_content_length: bool = False,
     ):
         self.payload = payload
         self.support_range = support_range
@@ -18,6 +20,11 @@ class FlakyTestServer:
         # a Range header was sent - simulates a server that advertises range
         # support (e.g. via Accept-Ranges on HEAD) but doesn't honor it on GET.
         self.ignore_range = ignore_range
+        # Lets tests simulate a HEAD probe failure (404/403/405 etc).
+        self.head_status = head_status
+        # Lets tests simulate a server that omits Content-Length on HEAD
+        # (e.g. chunked transfer encoding) instead of returning a real size.
+        self.omit_content_length = omit_content_length
         self._attempts = 0
         self.app = web.Application()
         # allow_head=False: aiohttp's add_get auto-registers a HEAD route by
@@ -39,7 +46,21 @@ class FlakyTestServer:
         if self.runner:
             await self.runner.cleanup()
 
-    async def _handle_head(self, request: web.Request) -> web.Response:
+    async def _handle_head(self, request: web.Request) -> web.StreamResponse:
+        if self.head_status != 200:
+            return web.Response(status=self.head_status)
+
+        if self.omit_content_length:
+            # Use a chunked StreamResponse so aiohttp doesn't auto-populate
+            # Content-Length - simulates servers using chunked transfer
+            # encoding on HEAD instead of advertising a real size.
+            response = web.StreamResponse(status=200)
+            response.enable_chunked_encoding()
+            if self.support_range:
+                response.headers["Accept-Ranges"] = "bytes"
+            await response.prepare(request)
+            return response
+
         headers = {"Content-Length": str(len(self.payload))}
         if self.support_range:
             headers["Accept-Ranges"] = "bytes"

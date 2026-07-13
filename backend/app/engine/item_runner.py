@@ -16,7 +16,13 @@ class ItemResult:
 async def _probe(url: str) -> tuple[int, bool]:
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.head(url)
-        total_size = int(response.headers.get("Content-Length", 0))
+        response.raise_for_status()
+
+        content_length = response.headers.get("Content-Length")
+        if content_length is None:
+            raise RuntimeError(f"Server did not return a Content-Length header for {url}")
+
+        total_size = int(content_length)
         supports_range = response.headers.get("Accept-Ranges") == "bytes"
         return total_size, supports_range
 
