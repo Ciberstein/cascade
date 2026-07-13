@@ -21,13 +21,9 @@ def test_split_single_chunk():
     assert ranges == [(0, 499)]
 
 
-def test_split_zero_total_size_produces_sentinel_empty_range():
-    # total_size=0 is a degenerate case: min(num_chunks, 0) -> 0, then max(1, 0) -> 1,
-    # giving base_size = 0 // 1 = 0 and a single range (0, -1). This is NOT a valid
-    # inclusive byte range (start > end) and must never be used to build an HTTP
-    # Range header. Callers (the segmented downloader) must special-case
-    # total_size == 0 and skip chunked range requests entirely (e.g. write an empty
-    # file directly). This test pins down the current sentinel behavior so a future
-    # change to this function doesn't silently alter it.
+def test_split_zero_total_size_returns_empty_list():
+    # total_size=0 has nothing to download: the function returns [] rather than a
+    # degenerate range, so callers can use a plain `if not ranges:` check instead of
+    # needing to know about an invalid-looking sentinel tuple.
     ranges = split_into_chunks(total_size=0, num_chunks=4)
-    assert ranges == [(0, -1)]
+    assert ranges == []
