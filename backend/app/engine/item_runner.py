@@ -1,4 +1,7 @@
 import asyncio
+import inspect
+import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 import httpx
@@ -27,16 +30,48 @@ async def _probe(url: str) -> tuple[int, bool]:
         return total_size, supports_range
 
 
-async def run_download_item(url: str, dest_path: str, num_chunks: int) -> ItemResult:
+async def run_download_item(
+    url: str,
+    dest_path: str,
+    num_chunks: int,
+    existing_progress: dict[int, int] | None = None,
+    on_progress: Callable[[int, int], None] | None = None,
+    on_chunks_planned: Callable[[list[tuple[int, int]]], Awaitable[None] | None] | None = None,
+) -> ItemResult:
     total_size, supports_range = await _probe(url)
     effective_chunks = num_chunks if supports_range else 1
 
-    with open(dest_path, "wb") as f:
+    open_mode = "r+b" if os.path.exists(dest_path) else "wb"
+    with open(dest_path, open_mode) as f:
         f.truncate(total_size)
 
     ranges = split_into_chunks(total_size, effective_chunks)
+
+    if on_chunks_planned is not None:
+        maybe_awaitable = on_chunks_planned(ranges)
+        if inspect.isawaitable(maybe_awaitable):
+            await maybe_awaitable
+
+    existing_progress = existing_progress or {}
+
+    async def _run_chunk(index: int, s: int, e: int) -> None:
+        resume_from = existing_progress.get(index, 0)
+
+        def _on_bytes(n: int) -> None:
+            if on_progress is not None:
+                on_progress(index, n)
+
+        await download_chunk(
+            url=url,
+            start=s,
+            end=e,
+            dest_path=dest_path,
+            resume_from=resume_from,
+            on_bytes=_on_bytes if on_progress is not None else None,
+        )
+
     await asyncio.gather(
-        *(download_chunk(url=url, start=s, end=e, dest_path=dest_path) for s, e in ranges)
+        *(_run_chunk(i, s, e) for i, (s, e) in enumerate(ranges))
     )
 
     return ItemResult(total_size=total_size, chunk_count=len(ranges))

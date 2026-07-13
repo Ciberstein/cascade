@@ -56,3 +56,30 @@ async def test_download_chunk_raises_when_server_ignores_range(test_server, tmp_
         await download_chunk(
             url=url, start=100, end=199, dest_path=str(dest), max_retries=1, backoff_base=0.01
         )
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_resumes_from_offset(test_server, tmp_path):
+    payload = b"A" * 200 + b"B" * 300  # 500 bytes total
+    _, url = await test_server(payload)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(payload[:200] + b"\x00" * 300)  # first 200 bytes already on disk
+
+    await download_chunk(url=url, start=0, end=499, dest_path=str(dest), resume_from=200)
+
+    assert dest.read_bytes() == payload
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_calls_progress_callback(test_server, tmp_path):
+    payload = b"A" * 1000
+    _, url = await test_server(payload)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(b"\x00" * len(payload))
+    seen: list[int] = []
+
+    await download_chunk(
+        url=url, start=0, end=999, dest_path=str(dest), on_bytes=lambda n: seen.append(n)
+    )
+
+    assert sum(seen) == 1000
