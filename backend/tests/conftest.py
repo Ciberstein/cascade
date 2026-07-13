@@ -52,8 +52,18 @@ from tests.fixtures.test_server import FlakyTestServer
 async def test_server():
     servers: list[FlakyTestServer] = []
 
-    async def _make(payload: bytes, support_range: bool = True, fail_first_n: int = 0):
-        server = FlakyTestServer(payload, support_range=support_range, fail_first_n=fail_first_n)
+    async def _make(
+        payload: bytes,
+        support_range: bool = True,
+        fail_first_n: int = 0,
+        ignore_range: bool = False,
+    ):
+        server = FlakyTestServer(
+            payload,
+            support_range=support_range,
+            fail_first_n=fail_first_n,
+            ignore_range=ignore_range,
+        )
         url = await server.start()
         servers.append(server)
         return server, url

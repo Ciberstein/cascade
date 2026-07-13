@@ -11,6 +11,7 @@ async def download_chunk(
     max_retries: int = 3,
     backoff_base: float = 0.5,
 ) -> None:
+    expected_bytes = end - start + 1
     last_error: Exception | None = None
 
     for attempt in range(max_retries):
@@ -21,10 +22,18 @@ async def download_chunk(
                     if response.status_code not in (200, 206):
                         raise RuntimeError(f"Unexpected status {response.status_code}")
 
+                    written = 0
                     with open(dest_path, "r+b") as f:
                         f.seek(start)
                         async for data in response.aiter_bytes():
                             f.write(data)
+                            written += len(data)
+
+                    if written != expected_bytes:
+                        raise RuntimeError(
+                            f"Expected {expected_bytes} bytes for range {start}-{end}, "
+                            f"got {written} (server may not have honored the Range request)"
+                        )
             return
         except Exception as exc:  # noqa: BLE001 - retried below
             last_error = exc

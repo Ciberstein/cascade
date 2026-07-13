@@ -39,3 +39,20 @@ async def test_download_chunk_raises_after_exhausting_retries(test_server, tmp_p
 
     with pytest.raises(RuntimeError):
         await download_chunk(url=url, start=0, end=99, dest_path=str(dest), max_retries=2, backoff_base=0.01)
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_raises_when_server_ignores_range(test_server, tmp_path):
+    # Server advertises range support but returns the full payload with
+    # status 200 regardless of the Range header - the downloader must detect
+    # the byte-count mismatch rather than silently writing the wrong bytes
+    # into the destination file at the requested offset.
+    payload = b"0123456789" * 100  # 1000 bytes
+    _, url = await test_server(payload, ignore_range=True)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(b"\x00" * len(payload))
+
+    with pytest.raises(RuntimeError):
+        await download_chunk(
+            url=url, start=100, end=199, dest_path=str(dest), max_retries=1, backoff_base=0.01
+        )

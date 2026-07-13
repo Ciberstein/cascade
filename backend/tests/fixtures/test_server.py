@@ -4,10 +4,20 @@ from aiohttp import web
 
 
 class FlakyTestServer:
-    def __init__(self, payload: bytes, support_range: bool = True, fail_first_n: int = 0):
+    def __init__(
+        self,
+        payload: bytes,
+        support_range: bool = True,
+        fail_first_n: int = 0,
+        ignore_range: bool = False,
+    ):
         self.payload = payload
         self.support_range = support_range
         self.fail_first_n = fail_first_n
+        # When True, always returns the full payload with status 200 even if
+        # a Range header was sent - simulates a server that advertises range
+        # support (e.g. via Accept-Ranges on HEAD) but doesn't honor it on GET.
+        self.ignore_range = ignore_range
         self._attempts = 0
         self.app = web.Application()
         # allow_head=False: aiohttp's add_get auto-registers a HEAD route by
@@ -41,7 +51,7 @@ class FlakyTestServer:
             return web.Response(status=503)
 
         range_header = request.headers.get("Range")
-        if range_header and self.support_range:
+        if range_header and self.support_range and not self.ignore_range:
             start, end = range_header.replace("bytes=", "").split("-")
             start, end = int(start), int(end)
             body = self.payload[start : end + 1]
