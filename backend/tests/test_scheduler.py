@@ -1,5 +1,8 @@
+import warnings
+
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import SAWarning
 
 from app.engine.scheduler import resume_stale_running_items, run_pending
 from app.models import Chunk, DownloadItem, Package
@@ -59,6 +62,36 @@ async def test_run_pending_respects_concurrency_limit(session, test_server, tmp_
     assert sum(1 for i in items if i.status == "completed") == 2
     assert sum(1 for i in items if i.status == "queued") == 1
     assert len(started) == 2  # only max_concurrent items started in this one run_pending() call
+
+
+@pytest.mark.asyncio
+async def test_run_pending_concurrent_items_do_not_corrupt_shared_session(session, test_server, tmp_path):
+    """Regression test for a session-corruption race: concurrently-running
+    items must never mutate SQLAlchemy-mapped attributes on the shared
+    session outside db_lock. If they do, another item's locked commit() can
+    autoflush mid-flight and hit the just-dirtied attribute, and SQLAlchemy
+    raises "Attribute history events accumulated ... have been reset" as an
+    SAWarning - turning that warning into a hard error here makes the race
+    deterministically fail the test instead of only showing up as flaky lost
+    progress under real concurrency.
+    """
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", category=SAWarning)
+
+        package = Package(name="pkg", status="queued", target_dir=str(tmp_path))
+        session.add(package)
+        await session.flush()
+        _, url1 = await test_server(b"A" * 500)
+        _, url2 = await test_server(b"B" * 500)
+        session.add(DownloadItem(package_id=package.id, url=url1, filename="a.bin", status="queued"))
+        session.add(DownloadItem(package_id=package.id, url=url2, filename="b.bin", status="queued"))
+        await session.commit()
+
+        # Should not raise SAWarning-turned-error even under real concurrency
+        await run_pending(session, max_concurrent=2, chunks_per_file=2, identity=lambda u: u)
+
+    result = await session.execute(select(DownloadItem).where(DownloadItem.package_id == package.id))
+    assert all(i.status == "completed" for i in result.scalars().all())
 
 
 @pytest.mark.asyncio
