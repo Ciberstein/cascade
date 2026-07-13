@@ -1,10 +1,13 @@
+import datetime as dt
+
 import pytest
+from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
 from app.api.auth import _get_or_create_admin
-from app.auth.security import hash_password
+from app.auth.security import ALGORITHM, hash_password
 from app.config import Settings
 from app.models import User
 
@@ -101,6 +104,20 @@ async def test_me_returns_user_when_authenticated(client):
 @pytest.mark.asyncio
 async def test_me_rejects_garbage_cookie(client):
     client.cookies.set("access_token", "not-a-valid-jwt")
+    response = client.get("/auth/me")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_me_rejects_token_missing_sub_claim(client):
+    # A validly-signed token that simply has no "sub" claim must not crash
+    # get_current_user with an uncaught KeyError -- it should 401 cleanly.
+    settings = Settings()
+    expire = dt.datetime.utcnow() + dt.timedelta(minutes=settings.jwt_expire_minutes)
+    token = jwt.encode({"exp": expire}, settings.jwt_secret, algorithm=ALGORITHM)
+
+    client.cookies.set("access_token", token)
     response = client.get("/auth/me")
 
     assert response.status_code == 401

@@ -12,6 +12,12 @@ async def get_current_user(
     access_token: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
+    """Resolve the current User from the access_token cookie.
+
+    Note: this returns the raw ORM User (including password_hash). Never
+    return it directly in a response body -- serialize via app.schemas.UserOut
+    (or hand-build a dict, as GET /auth/me does) instead.
+    """
     if access_token is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
@@ -20,7 +26,11 @@ async def get_current_user(
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    result = await db.execute(select(User).where(User.id == payload["sub"]))
+    sub = payload.get("sub")
+    if sub is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    result = await db.execute(select(User).where(User.id == sub))
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
