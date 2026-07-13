@@ -83,3 +83,43 @@ async def test_download_chunk_calls_progress_callback(test_server, tmp_path):
     )
 
     assert sum(seen) == 1000
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_skips_request_when_already_fully_resumed(test_server, tmp_path):
+    payload = b"A" * 100
+    # fail_first_n set far higher than max_retries: if download_chunk made
+    # any HTTP request at all, every attempt would 503 and the call would
+    # raise RuntimeError after exhausting retries. A clean return proves no
+    # request was made.
+    _, url = await test_server(payload, fail_first_n=1000)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(payload)
+    seen: list[int] = []
+
+    await download_chunk(
+        url=url,
+        start=0,
+        end=99,
+        dest_path=str(dest),
+        resume_from=100,
+        max_retries=2,
+        backoff_base=0.01,
+        on_bytes=lambda n: seen.append(n),
+    )
+
+    assert dest.read_bytes() == payload
+    assert seen == []
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_raises_value_error_when_resume_from_exceeds_chunk_size(
+    test_server, tmp_path
+):
+    payload = b"A" * 100
+    _, url = await test_server(payload)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(payload)
+
+    with pytest.raises(ValueError, match="resume_from"):
+        await download_chunk(url=url, start=0, end=99, dest_path=str(dest), resume_from=101)

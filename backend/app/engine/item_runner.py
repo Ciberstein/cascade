@@ -38,6 +38,20 @@ async def run_download_item(
     on_progress: Callable[[int, int], None] | None = None,
     on_chunks_planned: Callable[[list[tuple[int, int]]], Awaitable[None] | None] | None = None,
 ) -> ItemResult:
+    """Download `url` to `dest_path`, optionally resuming from prior progress.
+
+    existing_progress maps chunk index -> bytes already downloaded for that
+    chunk. Chunk indices are positional (0-based, matching the order
+    split_into_chunks returns ranges in), NOT stable identifiers - they are
+    only meaningful for the same num_chunks that produced them. If num_chunks
+    changes between the run that recorded existing_progress and this run,
+    the chunk boundaries shift and the recorded progress no longer lines up;
+    passing such stale progress will raise ValueError out of download_chunk
+    for any chunk where resume_from exceeds the (re-split) chunk's size.
+    Callers that persist progress across process restarts (e.g. a future
+    scheduler) must keep num_chunks fixed for the lifetime of an item, or
+    discard existing_progress when num_chunks changes.
+    """
     total_size, supports_range = await _probe(url)
     effective_chunks = num_chunks if supports_range else 1
 
