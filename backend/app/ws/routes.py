@@ -1,4 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from jose.exceptions import JWTError
 
 from app.auth.security import decode_access_token
 from app.ws.manager import manager
@@ -14,7 +15,7 @@ async def ws_endpoint(websocket: WebSocket):
         return
     try:
         decode_access_token(token)
-    except Exception:
+    except JWTError:
         await websocket.close(code=4401)
         return
 
@@ -23,4 +24,6 @@ async def ws_endpoint(websocket: WebSocket):
         while True:
             await websocket.receive_text()  # client doesn't send anything meaningful; keeps connection open
     except WebSocketDisconnect:
+        pass
+    finally:
         manager.disconnect(websocket)

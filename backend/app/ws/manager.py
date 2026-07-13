@@ -1,4 +1,7 @@
+import logging
 from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class WebSocketLike(Protocol):
@@ -23,7 +26,8 @@ class ConnectionManager:
         for connection in list(self._connections):
             try:
                 await connection.send_json(data)
-            except Exception:  # noqa: BLE001 - drop dead connections
+            except Exception as exc:  # noqa: BLE001 - drop dead connections
+                logger.debug("Dropping WebSocket connection after send failure: %s", exc)
                 self.disconnect(connection)
 
 
