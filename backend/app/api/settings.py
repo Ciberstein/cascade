@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -13,10 +14,18 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 async def _get_or_create_settings(db: AsyncSession) -> GlobalSettings:
     result = await db.execute(select(GlobalSettings).where(GlobalSettings.id == 1))
     row = result.scalar_one_or_none()
-    if row is None:
-        row = GlobalSettings(id=1)
-        db.add(row)
+    if row is not None:
+        return row
+
+    row = GlobalSettings(id=1)
+    db.add(row)
+    try:
         await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        result = await db.execute(select(GlobalSettings).where(GlobalSettings.id == 1))
+        row = result.scalar_one()
+    else:
         await db.refresh(row)
     return row
 
