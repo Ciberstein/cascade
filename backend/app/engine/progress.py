@@ -28,6 +28,7 @@ class ThrottledBroadcaster:
             await self._broadcast_fn(payload)
 
     async def flush(self) -> None:
-        for item_id, payload in list(self._latest.items()):
-            await self._broadcast_fn(payload)
-            self._last_sent[item_id] = time.monotonic()
+        async with self._lock:
+            for item_id, payload in list(self._latest.items()):
+                await self._broadcast_fn(payload)
+                self._last_sent[item_id] = time.monotonic()
