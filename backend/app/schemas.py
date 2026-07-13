@@ -56,3 +56,19 @@ class PackageResponse(BaseModel):
     items: list[DownloadItemResponse]
 
     model_config = {"from_attributes": True}
+
+
+class SettingsResponse(BaseModel):
+    download_root: str
+    max_concurrent_downloads: int
+    chunks_per_file: int
+    max_speed_kbps: int
+
+    model_config = {"from_attributes": True}
+
+
+class UpdateSettingsRequest(BaseModel):
+    download_root: str
+    max_concurrent_downloads: int = Field(ge=1, le=20)
+    chunks_per_file: int = Field(ge=1, le=16)
+    max_speed_kbps: int = Field(ge=0)
