@@ -43,3 +43,22 @@ def client(db_engine):
 def auth_client(client):
     client.post("/auth/login", json={"username": "admin", "password": "hunter2"})
     return client
+
+
+from tests.fixtures.test_server import FlakyTestServer
+
+
+@pytest_asyncio.fixture
+async def test_server():
+    servers: list[FlakyTestServer] = []
+
+    async def _make(payload: bytes, support_range: bool = True, fail_first_n: int = 0):
+        server = FlakyTestServer(payload, support_range=support_range, fail_first_n=fail_first_n)
+        url = await server.start()
+        servers.append(server)
+        return server, url
+
+    yield _make
+
+    for server in servers:
+        await server.stop()

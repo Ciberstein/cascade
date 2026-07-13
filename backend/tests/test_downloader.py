@@ -1,0 +1,41 @@
+import pytest
+
+from app.engine.downloader import download_chunk
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_writes_correct_bytes(test_server, tmp_path):
+    payload = b"0123456789" * 100  # 1000 bytes
+    _, url = await test_server(payload)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(b"\x00" * len(payload))
+
+    await download_chunk(url=url, start=100, end=199, dest_path=str(dest))
+
+    with open(dest, "rb") as f:
+        f.seek(100)
+        written = f.read(100)
+    assert written == payload[100:200]
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_retries_on_transient_failure(test_server, tmp_path):
+    payload = b"A" * 500
+    _, url = await test_server(payload, fail_first_n=2)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(b"\x00" * len(payload))
+
+    await download_chunk(url=url, start=0, end=499, dest_path=str(dest), max_retries=3, backoff_base=0.01)
+
+    assert dest.read_bytes() == payload
+
+
+@pytest.mark.asyncio
+async def test_download_chunk_raises_after_exhausting_retries(test_server, tmp_path):
+    payload = b"A" * 100
+    _, url = await test_server(payload, fail_first_n=10)
+    dest = tmp_path / "out.bin"
+    dest.write_bytes(b"\x00" * len(payload))
+
+    with pytest.raises(RuntimeError):
+        await download_chunk(url=url, start=0, end=99, dest_path=str(dest), max_retries=2, backoff_base=0.01)
