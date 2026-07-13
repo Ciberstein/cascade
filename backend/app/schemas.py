@@ -26,7 +26,7 @@ class UserOut(BaseModel):
 
 
 class CreatePackageRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1)
     urls: list[str] = Field(min_length=1)
 
 

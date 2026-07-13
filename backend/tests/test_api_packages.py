@@ -1,4 +1,8 @@
+import os
+
 import pytest
+
+from app.config import Settings
 
 
 @pytest.mark.asyncio
@@ -30,3 +34,21 @@ async def test_create_package_requires_auth(client):
 async def test_create_package_rejects_empty_urls(auth_client):
     response = auth_client.post("/packages", json={"name": "x", "urls": []})
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_package_target_dir_is_safe_even_with_malicious_name(auth_client):
+    response = auth_client.post(
+        "/packages",
+        json={"name": "../../etc/passwd", "urls": ["https://example.com/a.zip"]},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    target_dir = body["target_dir"]
+    download_root = Settings().download_root
+
+    # must stay confined under download_root, keyed by the generated id --
+    # never derived from (and never escaping via) the user-supplied name.
+    assert ".." not in target_dir
+    assert target_dir == os.path.join(download_root, body["id"])

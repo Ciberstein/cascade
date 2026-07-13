@@ -26,13 +26,11 @@ async def create_package(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    package = Package(
-        name=payload.name,
-        status="queued",
-        target_dir=os.path.join(_settings.download_root, payload.name),
-    )
+    package = Package(name=payload.name, status="queued", target_dir="")
     db.add(package)
-    await db.flush()
+    await db.flush()  # populates package.id
+
+    package.target_dir = os.path.join(_settings.download_root, package.id)
 
     for url in payload.urls:
         db.add(
