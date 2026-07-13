@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -9,7 +9,7 @@ from app.auth.dependencies import get_current_user
 from app.config import Settings
 from app.database import get_db
 from app.models import DownloadItem, Package, User
-from app.schemas import CreatePackageRequest, PackageResponse
+from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageStatusRequest
 
 router = APIRouter(prefix="/packages", tags=["packages"])
 _settings = Settings()
@@ -57,3 +57,23 @@ async def create_package(
         select(Package).options(selectinload(Package.items)).where(Package.id == package.id)
     )
     return result.scalar_one()
+
+
+@router.patch("/{package_id}", response_model=PackageResponse)
+async def update_package_status(
+    package_id: str,
+    payload: UpdatePackageStatusRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Package).options(selectinload(Package.items)).where(Package.id == package_id)
+    )
+    package = result.scalar_one_or_none()
+    if package is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    package.status = payload.status
+    await db.commit()
+    await db.refresh(package, attribute_names=["items"])
+    return package

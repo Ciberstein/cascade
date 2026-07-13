@@ -70,3 +70,36 @@ async def test_list_packages(auth_client):
 async def test_list_packages_requires_auth(client):
     response = client.get("/packages")
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_patch_package_status(auth_client):
+    create = auth_client.post("/packages", json={"name": "Pkg", "urls": ["https://example.com/a.zip"]})
+    package_id = create.json()["id"]
+
+    response = auth_client.patch(f"/packages/{package_id}", json={"status": "paused"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "paused"
+
+
+@pytest.mark.asyncio
+async def test_patch_package_rejects_invalid_status(auth_client):
+    create = auth_client.post("/packages", json={"name": "Pkg", "urls": ["https://example.com/a.zip"]})
+    package_id = create.json()["id"]
+
+    response = auth_client.patch(f"/packages/{package_id}", json={"status": "bogus"})
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_patch_package_404_for_unknown_id(auth_client):
+    response = auth_client.patch("/packages/does-not-exist", json={"status": "paused"})
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_patch_package_requires_auth(client):
+    response = client.patch("/packages/some-id", json={"status": "paused"})
+    assert response.status_code == 401

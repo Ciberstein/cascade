@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -40,6 +42,10 @@ class DownloadItemResponse(BaseModel):
     error_message: str | None
 
     model_config = {"from_attributes": True}
+
+
+class UpdatePackageStatusRequest(BaseModel):
+    status: Literal["queued", "paused", "canceled"]
 
 
 class PackageResponse(BaseModel):
