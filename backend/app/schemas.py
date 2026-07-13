@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
@@ -21,5 +21,32 @@ class UserOut(BaseModel):
 
     id: str
     username: str
+
+    model_config = {"from_attributes": True}
+
+
+class CreatePackageRequest(BaseModel):
+    name: str
+    urls: list[str] = Field(min_length=1)
+
+
+class DownloadItemResponse(BaseModel):
+    id: str
+    url: str
+    filename: str
+    status: str
+    total_size: int | None
+    downloaded_bytes: int
+    error_message: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class PackageResponse(BaseModel):
+    id: str
+    name: str
+    status: str
+    target_dir: str
+    items: list[DownloadItemResponse]
 
     model_config = {"from_attributes": True}

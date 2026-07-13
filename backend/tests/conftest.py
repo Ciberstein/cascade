@@ -37,3 +37,9 @@ def client(db_engine):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def auth_client(client):
+    client.post("/auth/login", json={"username": "admin", "password": "hunter2"})
+    return client
