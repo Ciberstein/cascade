@@ -2,24 +2,23 @@ import { useMemo, useState } from 'react'
 import './AddLinksModal.css'
 
 interface Props {
-  onSubmit: (name: string, urls: string[]) => void
+  onSubmit: (urls: string[]) => void
   onClose: () => void
-  /** Set while the create request is in flight. */
+  /** Set while the crawl job is being created. */
   submitting?: boolean
   error?: string | null
 }
 
 export default function AddLinksModal({ onSubmit, onClose, submitting = false, error }: Props) {
-  const [name, setName] = useState('')
   const [raw, setRaw] = useState('')
 
   const { urls, duplicates } = useMemo(() => parseLinks(raw), [raw])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    // The backend rejects an empty name (min_length=1), so give it one rather
-    // than surfacing a 422 the user can't act on.
-    onSubmit(name.trim() || 'Paquete sin nombre', urls)
+    // El nombre del paquete ya no se pide acá: se elige al confirmar, cuando
+    // el usuario ya vio qué archivos aparecieron.
+    onSubmit(urls)
   }
 
   return (
@@ -31,17 +30,6 @@ export default function AddLinksModal({ onSubmit, onClose, submitting = false, e
     >
       <form className="modal" role="dialog" aria-modal="true" aria-label="Agregar enlaces" onSubmit={handleSubmit}>
         <h2 className="modal__title">Agregar enlaces</h2>
-
-        <div className="modal__field">
-          <label htmlFor="package-name">Nombre del paquete</label>
-          <input
-            id="package-name"
-            autoFocus
-            placeholder="Paquete sin nombre"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
 
         <div className="modal__field">
           <label htmlFor="links">Enlaces</label>
@@ -71,7 +59,7 @@ export default function AddLinksModal({ onSubmit, onClose, submitting = false, e
             Cancelar
           </button>
           <button type="submit" className="modal__primary" disabled={urls.length === 0 || submitting}>
-            Agregar
+            Analizar
           </button>
         </div>
       </form>

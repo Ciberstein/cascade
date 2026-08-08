@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { createPackage, listPackages, updatePackageStatus } from '../api/packages'
+import { listPackages, updatePackageStatus } from '../api/packages'
+import { createCrawlJob } from '../api/crawl'
 import { UnauthorizedError } from '../api/client'
 import { useProgressSocket } from '../ws/useProgressSocket'
 import PackageRow from '../components/PackageRow'
 import AddLinksModal from '../components/AddLinksModal'
 import PackageDetail from './PackageDetail'
 import SettingsPage from './Settings'
+import LinkGrabber from './LinkGrabber'
 import type { Package, PackageAction } from '../types'
 import './Dashboard.css'
 
@@ -20,7 +22,11 @@ interface Props {
  * than pulling in a router. Detail holds an id (not the package object) so the
  * background poll keeps feeding it fresh data.
  */
-type View = { name: 'list' } | { name: 'detail'; packageId: string } | { name: 'settings' }
+type View =
+  | { name: 'list' }
+  | { name: 'detail'; packageId: string }
+  | { name: 'settings' }
+  | { name: 'grabber'; jobId: string }
 
 /**
  * How often the package list is refetched.
@@ -72,21 +78,20 @@ export default function Dashboard({ onUnauthorized }: Props) {
     if (unauthorized) onUnauthorized?.()
   }, [unauthorized, onUnauthorized])
 
-  async function handleCreate(name: string, urls: string[]) {
+  async function handleAnalyze(urls: string[]) {
     setCreating(true)
     setCreateError(null)
     try {
-      await createPackage(name, urls)
+      const job = await createCrawlJob(urls.join('\n'))
       setShowModal(false)
-      await refresh()
+      setView({ name: 'grabber', jobId: job.id })
     } catch (e) {
       if (e instanceof UnauthorizedError) {
         onUnauthorized?.()
         return
       }
-      // Deliberately leaves the modal open: closing it would discard the URLs
-      // the user just pasted, with nothing to retry from.
-      setCreateError(e instanceof Error ? e.message : 'No se pudo crear el paquete')
+      // El modal queda abierto: cerrarlo tiraría los enlaces recién pegados.
+      setCreateError(e instanceof Error ? e.message : 'No se pudo analizar los enlaces')
     } finally {
       setCreating(false)
     }
@@ -108,6 +113,20 @@ export default function Dashboard({ onUnauthorized }: Props) {
   if (view.name === 'settings') {
     return (
       <SettingsPage onClose={() => setView({ name: 'list' })} onUnauthorized={onUnauthorized} />
+    )
+  }
+
+  if (view.name === 'grabber') {
+    return (
+      <LinkGrabber
+        jobId={view.jobId}
+        onBack={() => setView({ name: 'list' })}
+        onDone={() => {
+          setView({ name: 'list' })
+          void refresh()
+        }}
+        onUnauthorized={onUnauthorized}
+      />
     )
   }
 
@@ -164,7 +183,7 @@ export default function Dashboard({ onUnauthorized }: Props) {
 
       {showModal && (
         <AddLinksModal
-          onSubmit={(name, urls) => void handleCreate(name, urls)}
+          onSubmit={(urls) => void handleAnalyze(urls)}
           onClose={() => {
             setShowModal(false)
             setCreateError(null)

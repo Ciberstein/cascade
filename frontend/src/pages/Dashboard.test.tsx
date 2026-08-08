@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import Dashboard from './Dashboard'
 import * as packagesApi from '../api/packages'
+import * as crawlApi from '../api/crawl'
 import * as settingsApi from '../api/settings'
 import * as socketHook from '../ws/useProgressSocket'
 import { UnauthorizedError } from '../api/client'
@@ -54,31 +55,37 @@ test('refetches so status transitions appear without a reload', async () => {
   expect(list.mock.calls.length).toBeGreaterThan(1)
 })
 
-test('creates a package from the modal and refreshes', async () => {
-  const list = vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
-  const create = vi.spyOn(packagesApi, 'createPackage').mockResolvedValue(pkg)
+test('pasting links creates a crawl job and opens the tray', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
+  const create = vi.spyOn(crawlApi, 'createCrawlJob').mockResolvedValue({
+    id: 'j1', raw_input: 'http://x/a.zip', status: 'pending', error_message: null, results: [],
+  })
+  vi.spyOn(crawlApi, 'getCrawlJob').mockResolvedValue({
+    id: 'j1', raw_input: 'http://x/a.zip', status: 'done', error_message: null,
+    results: [{ id: 'r1', url: 'http://x/a.zip', filename: 'a.zip', size: 10, hoster: 'direct', status: 'ok', error_message: null }],
+  })
   stubSocket()
 
   render(<Dashboard />)
   fireEvent.click(await screen.findByRole('button', { name: 'Agregar enlaces' }))
+  fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: 'http://x/a.zip' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
 
-  fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Agregar' }))
-
-  await waitFor(() => expect(create).toHaveBeenCalledWith('Paquete sin nombre', ['https://x/a.zip']))
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(list.mock.calls.length).toBeGreaterThan(1)
+  // El modal ya no crea un paquete: ahora abre el análisis y el usuario
+  // confirma qué baja.
+  await waitFor(() => expect(create).toHaveBeenCalledWith('http://x/a.zip'))
+  expect(await screen.findByText('a.zip')).toBeInTheDocument()
 })
 
-test('keeps the modal open and shows why when creation fails', async () => {
+test('keeps the modal open and shows why when the crawl job fails to create', async () => {
   vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
-  vi.spyOn(packagesApi, 'createPackage').mockRejectedValue(new Error('Carpeta de destino no escribible'))
+  vi.spyOn(crawlApi, 'createCrawlJob').mockRejectedValue(new Error('Carpeta de destino no escribible'))
   stubSocket()
 
   render(<Dashboard />)
   fireEvent.click(await screen.findByRole('button', { name: 'Agregar enlaces' }))
   fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Agregar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
 
   // Closing the modal here would throw away the URLs the user just pasted.
   expect(await screen.findByText('Carpeta de destino no escribible')).toBeInTheDocument()
