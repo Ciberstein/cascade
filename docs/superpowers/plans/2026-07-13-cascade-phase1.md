@@ -3895,9 +3895,22 @@ If any step fails, file it as a follow-up task before considering Fase 1 done �
 
 ---
 
+## Resultado del smoke test (Task 32) y correcciones derivadas
+
+El smoke test se corrió contra el stack completo de Docker Compose. Login, creación de paquete, descarga de 100 MB en 4 chunks y verificación en disco: OK, con md5 idéntico al origen.
+
+El entorno no tenía DNS saliente desde los contenedores, así que en vez de una URL pública (`speed.hetzner.de`) se usó un nginx con `limit_rate` dentro de la red de compose. Eso ejercita todo el camino API → scheduler → engine → disco → WS; lo único que no prueba es la salida a internet, que no es código de Cascade.
+
+El paso 6 (resume tras reinicio) **falló**, y expuso dos huecos contra el spec que el plan no cubría. Ambos quedaron corregidos y re-verificados:
+
+1. **El resume no reanudaba: volvía a empezar de cero.** Durante una descarga completa la tabla `chunks` no tenía ninguna fila y `downloaded_bytes` quedaba en 0, porque `on_chunks_planned` hacía `flush()` sin commit y el progreso por chunk solo se escribía al completar. El camino de resume (`existing_progress` → `Range`) funcionaba, pero leía siempre ceros. Corregido con checkpointing periódico (`fix: checkpoint chunk progress…`). Detalle de correctitud: un offset solo es reanudable después de `flush()` del archivo — el contador que alimenta la barra de progreso cuenta bytes que todavía están en el buffer, y persistirlo dejaría un hueco silencioso en el archivo. Re-verificado: reinicio a mitad de una descarga de 100 MB, los contadores continúan desde el checkpoint y el md5 final coincide.
+
+2. **`max_speed_kbps` no se aplicaba en ningún lado.** El spec lo lista como setting de Fase 1; se persistía y nadie lo leía. Implementado como un token bucket único compartido por todos los chunks (`feat: enforce the global download speed limit`). Verificado: con cap de 2048 KB/s contra un servidor que sirve a 100 MB/s, el throughput medido fue ~2,0 MB/s.
+
+También se corrigió que `max_concurrent_downloads`, `chunks_per_file` y `download_root` se guardaban pero nunca se leían (`fix: make the saved settings actually drive downloads`), lo que cierra el fast-follow que anotaba la Task 19.
+
 ## Fuera de alcance (carried over from spec, confirmed still deferred)
 
-- Live-reloading `max_concurrent_downloads`/`chunks_per_file` from the `GlobalSettings` DB row into the running scheduler loop (noted in Task 19) — currently sourced from env vars only; `PUT /settings` persists correctly but a backend restart is needed to pick up new concurrency/chunk values.
 - Hoster plugins, CAPTCHA solving, archive/container extraction — Fases 2–4.
 - Multi-usuario / SaaS, link grabbing desde portapapeles o extensión de navegador — confirmado fuera de alcance en el spec.
 
