@@ -7,17 +7,17 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // The SPA and the API are same-origin in production (the compose stack puts
-    // them behind one host), so the app calls relative /api paths. In dev, Vite
-    // serves the SPA on its own port - this proxy keeps those same relative
-    // paths working, including the WebSocket upgrade for live progress.
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8000',
-        changeOrigin: true,
-        ws: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-    },
+    // both behind one host), so the app calls the backend's routes as plain
+    // relative paths. In dev, Vite serves the SPA on its own port - this proxy
+    // forwards those same paths to the backend so no build-time base URL is
+    // needed. Mirrors the router prefixes registered in backend/app/main.py;
+    // ws:true covers the /ws progress socket's upgrade handshake.
+    proxy: Object.fromEntries(
+      ['/auth', '/packages', '/settings', '/health', '/ws'].map((path) => [
+        path,
+        { target: 'http://localhost:8000', changeOrigin: true, ws: true },
+      ]),
+    ),
   },
   test: {
     environment: 'jsdom',
