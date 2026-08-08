@@ -17,6 +17,8 @@ const pkg: Package = {
       total_size: 1000,
       downloaded_bytes: 250,
       error_message: null,
+      hoster: 'direct',
+      retry_after: null,
     },
     {
       id: 'i2',
@@ -26,6 +28,8 @@ const pkg: Package = {
       total_size: null,
       downloaded_bytes: 0,
       error_message: 'timeout',
+      hoster: 'direct',
+      retry_after: null,
     },
   ],
 }

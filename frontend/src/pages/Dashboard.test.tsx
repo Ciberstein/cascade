@@ -109,6 +109,8 @@ test('clicking a package name shows its detail view', async () => {
           total_size: 100,
           downloaded_bytes: 10,
           error_message: null,
+          hoster: 'direct',
+          retry_after: null,
         },
       ],
     },

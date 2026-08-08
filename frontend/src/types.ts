@@ -13,6 +13,10 @@ export interface DownloadItem {
   total_size: number | null
   downloaded_bytes: number
   error_message: string | null
+  /** Qué plugin lo resolvió; 'direct' para un enlace directo. */
+  hoster: string
+  /** ISO 8601 mientras el hoster pide esperar; null en el caso normal. */
+  retry_after: string | null
 }
 
 export interface Package {
@@ -29,4 +33,25 @@ export interface AppSettings {
   chunks_per_file: number
   /** 0 means unlimited. */
   max_speed_kbps: number
+}
+
+export type CrawlJobStatus = 'pending' | 'running' | 'done' | 'error'
+export type CrawlResultStatus = 'ok' | 'dead' | 'error'
+
+export interface CrawlResult {
+  id: string
+  url: string
+  filename: string
+  size: number | null
+  hoster: string
+  status: CrawlResultStatus
+  error_message: string | null
+}
+
+export interface CrawlJob {
+  id: string
+  raw_input: string
+  status: CrawlJobStatus
+  error_message: string | null
+  results: CrawlResult[]
 }
