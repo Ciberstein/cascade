@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import Dashboard from './Dashboard'
 import * as packagesApi from '../api/packages'
+import * as settingsApi from '../api/settings'
 import * as socketHook from '../ws/useProgressSocket'
 import { UnauthorizedError } from '../api/client'
 import type { Package } from '../types'
@@ -93,6 +94,65 @@ test('maps the pause control to the status the API accepts', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }))
 
   await waitFor(() => expect(update).toHaveBeenCalledWith('p1', 'paused'))
+})
+
+test('clicking a package name shows its detail view', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([
+    {
+      ...pkg,
+      items: [
+        {
+          id: 'i1',
+          url: 'https://x/a.zip',
+          filename: 'a.zip',
+          status: 'running',
+          total_size: 100,
+          downloaded_bytes: 10,
+          error_message: null,
+        },
+      ],
+    },
+  ])
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByText('Pkg 1'))
+
+  expect(await screen.findByText('a.zip')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument()
+})
+
+test('opens and closes the settings view', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
+  vi.spyOn(settingsApi, 'getSettings').mockResolvedValue({
+    download_root: '/downloads',
+    max_concurrent_downloads: 3,
+    chunks_per_file: 4,
+    max_speed_kbps: 0,
+  })
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Configuración' }))
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
+  expect(await screen.findByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument()
+})
+
+test('falls back to the list when the open package disappears', async () => {
+  // Nothing deletes packages in Fase 1, but the detail view resolves its
+  // package from the polled list - it must not render a dead screen if a poll
+  // ever comes back without it.
+  vi.useFakeTimers()
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValueOnce([pkg]).mockResolvedValue([])
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await vi.waitFor(() => screen.getByText('Pkg 1')))
+  expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument()
+
+  await vi.advanceTimersByTimeAsync(4000)
+  await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument())
 })
 
 test('reports an expired session to the shell', async () => {

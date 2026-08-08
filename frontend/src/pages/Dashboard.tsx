@@ -4,13 +4,23 @@ import { UnauthorizedError } from '../api/client'
 import { useProgressSocket } from '../ws/useProgressSocket'
 import PackageRow from '../components/PackageRow'
 import AddLinksModal from '../components/AddLinksModal'
+import PackageDetail from './PackageDetail'
+import SettingsPage from './Settings'
 import type { Package, PackageAction } from '../types'
 import './Dashboard.css'
 
 interface Props {
   onUnauthorized?: () => void
-  onOpenPackage?: (id: string) => void
 }
+
+/**
+ * Which screen is showing.
+ *
+ * Fase 1 has three screens behind one auth gate, so this stays as state rather
+ * than pulling in a router. Detail holds an id (not the package object) so the
+ * background poll keeps feeding it fresh data.
+ */
+type View = { name: 'list' } | { name: 'detail'; packageId: string } | { name: 'settings' }
 
 /**
  * How often the package list is refetched.
@@ -22,13 +32,14 @@ interface Props {
  */
 const REFRESH_INTERVAL_MS = 3000
 
-export default function Dashboard({ onUnauthorized, onOpenPackage }: Props) {
+export default function Dashboard({ onUnauthorized }: Props) {
   const [packages, setPackages] = useState<Package[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [view, setView] = useState<View>({ name: 'list' })
 
   const { progressByItemId, unauthorized } = useProgressSocket()
 
@@ -94,13 +105,37 @@ export default function Dashboard({ onUnauthorized, onOpenPackage }: Props) {
     }
   }
 
+  if (view.name === 'settings') {
+    return (
+      <SettingsPage onClose={() => setView({ name: 'list' })} onUnauthorized={onUnauthorized} />
+    )
+  }
+
+  if (view.name === 'detail') {
+    const selected = packages.find((p) => p.id === view.packageId)
+    // Falls through to the list if the package is gone (deleted elsewhere, or
+    // the first poll hasn't answered yet) rather than rendering a dead screen.
+    if (selected) {
+      return (
+        <PackageDetail
+          package={selected}
+          progressByItemId={progressByItemId}
+          onBack={() => setView({ name: 'list' })}
+        />
+      )
+    }
+  }
+
   return (
     <div className="dashboard">
       <div className="dashboard__toolbar">
         <h1 className="dashboard__title">Descargas</h1>
-        <button className="dashboard__primary" onClick={() => setShowModal(true)}>
-          Agregar enlaces
-        </button>
+        <div className="dashboard__toolbar-actions">
+          <button onClick={() => setView({ name: 'settings' })}>Configuración</button>
+          <button className="dashboard__primary" onClick={() => setShowModal(true)}>
+            Agregar enlaces
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -121,7 +156,7 @@ export default function Dashboard({ onUnauthorized, onOpenPackage }: Props) {
               onPause={(id) => void handleStatusChange(id, 'paused')}
               onResume={(id) => void handleStatusChange(id, 'queued')}
               onCancel={(id) => void handleStatusChange(id, 'canceled')}
-              onOpen={onOpenPackage}
+              onOpen={(id) => setView({ name: 'detail', packageId: id })}
             />
           ))}
         </div>

@@ -16,6 +16,11 @@
   font-size: 1.25rem;
 }
 
+.dashboard__toolbar-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .dashboard__primary {
   background: var(--accent);
   border-color: var(--accent);
