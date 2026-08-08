@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_serializer, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -45,6 +45,21 @@ class DownloadItemResponse(BaseModel):
     retry_after: dt.datetime | None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("retry_after")
+    def _utc(self, value: dt.datetime | None) -> str | None:
+        """Serializa con "Z" explícito.
+
+        La columna guarda UTC sin tzinfo, así que por defecto saldría como
+        "2026-08-08T14:30:00". Un string ISO sin offset lo parsea JavaScript
+        como hora *local*, y la UI mostraría la espera corrida por el huso -
+        tres horas en este caso. Justo el dato cuya única función es que el
+        usuario no confunda "agendado" con "roto".
+        """
+        if value is None:
+            return None
+        aware = value if value.tzinfo else value.replace(tzinfo=dt.timezone.utc)
+        return aware.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 class UpdatePackageStatusRequest(BaseModel):

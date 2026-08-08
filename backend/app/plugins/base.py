@@ -54,9 +54,26 @@ class UnsupportedLink(PluginError):
 class RateLimited(PluginError):
     """El hoster pide esperar. No es un fallo, es trabajo agendado."""
 
+    #: Techo sobre lo que un plugin puede pedir esperar. Un valor absurdo
+    #: (un bug de fecha, el año 9999) dejaría el item parado para siempre y no
+    #: hay endpoint para reencolarlo a mano.
+    MAX_WAIT = dt.timedelta(hours=6)
+
     def __init__(self, retry_at: dt.datetime, message: str = "rate limited"):
         super().__init__(message)
-        self.retry_at = retry_at
+        if not isinstance(retry_at, dt.datetime):
+            raise TypeError(f"retry_at debe ser datetime, no {type(retry_at).__name__}")
+
+        # Normalizado a UTC naive, que es lo que guarda la columna y contra lo
+        # que compara el scheduler. Sin esto, un plugin que use
+        # datetime.now(UTC) - lo natural de escribir - se compara contra
+        # utcnow() sin convertir, y en Postgres la columna ni siquiera acepta
+        # un datetime con tzinfo.
+        if retry_at.tzinfo is not None:
+            retry_at = retry_at.astimezone(dt.timezone.utc).replace(tzinfo=None)
+
+        now = dt.datetime.utcnow()
+        self.retry_at = min(max(retry_at, now), now + self.MAX_WAIT)
 
 
 @runtime_checkable

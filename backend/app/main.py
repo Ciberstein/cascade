@@ -10,11 +10,11 @@ from app.api.crawl_jobs import router as crawl_jobs_router
 from app.api.packages import router as packages_router
 from app.api.settings import router as settings_router
 from app.config import Settings
-from app.crawler.runner import run_pending_crawls
+from app.crawler.runner import requeue_stale_running_jobs, run_pending_crawls
 from app.database import SessionLocal
 from app.engine.rate_limiter import limiter
 from app.engine.scheduler import resume_stale_running_items, run_pending
-from app.plugins.base import DirectLink
+from app.plugins.base import DirectLink, PluginError, UnsupportedLink
 from app.plugins.registry import call_resolve, registry
 from app.settings_store import read_settings
 from app.ws.routes import router as ws_router
@@ -43,8 +43,22 @@ async def _resolve(url: str, hoster: str) -> DirectLink:
     que se levantó), se vuelve a matchear por URL en vez de fallar el item:
     en el peor caso cae en `direct`, que es exactamente lo que hacía Fase 1.
     """
-    plugin = registry.get(hoster) or registry.find(url)
-    return await call_resolve(plugin, url)
+    named = registry.get(hoster)
+    candidates = [named] if named is not None else []
+    # Los demás quedan detrás como alternativa: si el plugin con el que se
+    # encoló contesta UnsupportedLink (la URL cambió de forma, el sitio dejó
+    # de servir lo que servía), se sigue probando hasta `direct` en vez de
+    # fallar el item.
+    candidates += [p for p in registry.candidates(url) if p is not named]
+
+    last: UnsupportedLink | None = None
+    for plugin in candidates:
+        try:
+            return await call_resolve(plugin, url)
+        except UnsupportedLink as exc:
+            last = exc
+            continue
+    raise last if last is not None else PluginError(f"ningún plugin resolvió {url}")
 
 
 async def _effective_limits(db: "AsyncSession") -> tuple[int, int]:
@@ -141,6 +155,7 @@ async def lifespan(app: FastAPI):
     try:
         async with SessionLocal() as db:
             await resume_stale_running_items(db)
+            await requeue_stale_running_jobs(db)
     except Exception:  # noqa: BLE001 - best-effort recovery, not a boot precondition
         # The DB is commonly not accepting connections yet when the app
         # container starts alongside it; failing startup here would make the

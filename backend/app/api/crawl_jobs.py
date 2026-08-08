@@ -74,7 +74,12 @@ async def promote(
     """
     result = await db.execute(
         select(CrawlResult).where(
-            CrawlResult.crawl_job_id == job_id, CrawlResult.id.in_(payload.result_ids)
+            CrawlResult.crawl_job_id == job_id,
+            CrawlResult.id.in_(payload.result_ids),
+            # La UI ya deshabilita las casillas de los muertos, pero eso es
+            # presentación: sin filtrar acá, un cliente puede encolar un item
+            # cuyo fallo está garantizado.
+            CrawlResult.status == "ok",
         )
     )
     chosen = result.scalars().all()
@@ -87,12 +92,20 @@ async def promote(
     await db.flush()  # populates package.id
     package.target_dir = os.path.join(root, package.id)
 
+    taken: set[str] = set()
     for found in chosen:
         db.add(
             DownloadItem(
                 package_id=package.id,
                 url=found.url,
-                filename=found.filename,
+                # El crawler aplana el árbol: "media/notes.txt" y
+                # "media/sub/notes.txt" llegan acá con el mismo nombre y van a
+                # la misma carpeta. Sin desambiguar serían dos items con el
+                # mismo destino, y el scheduler los correría a la vez: dos
+                # escritores abriendo el mismo archivo en "r+b" y buscando sus
+                # propios rangos. El resultado es un archivo con las dos
+                # descargas entremezcladas y ambos items en "completed".
+                filename=_unique_filename(found.filename, taken),
                 total_size=found.size,
                 hoster=found.hoster,
                 status="queued",
@@ -105,6 +118,21 @@ async def promote(
         select(Package).options(selectinload(Package.items)).where(Package.id == package.id)
     )
     return created.scalar_one()
+
+
+def _unique_filename(name: str, taken: set[str]) -> str:
+    """Agrega un sufijo numérico si el nombre ya se usó en este paquete."""
+    if name not in taken:
+        taken.add(name)
+        return name
+
+    stem, dot, ext = name.partition(".")
+    for n in range(2, 1000):
+        candidate = f"{stem} ({n}){dot}{ext}"
+        if candidate not in taken:
+            taken.add(candidate)
+            return candidate
+    raise HTTPException(status_code=409, detail=f"demasiados archivos llamados {name}")
 
 
 async def _download_root(db: AsyncSession) -> str:

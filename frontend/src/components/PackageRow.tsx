@@ -36,9 +36,14 @@ export default function PackageRow({
   const finished = FINISHED.has(pkg.status)
 
   // El primero que vuelve es el que define cuándo el paquete se mueve otra vez.
+  // Solo cuenta un item que siga esperando de verdad: sin filtrar por estado y
+  // por vencimiento, un item que ya terminó anunciaría una espera para siempre,
+  // y una marca vieja taparía la espera real de un item hermano.
+  const now = Date.now()
   const waitingUntil = pkg.items
-    .map((i) => i.retry_after)
-    .filter((value): value is string => value !== null)
+    .filter((i) => i.status === 'queued' && i.retry_after !== null)
+    .map((i) => i.retry_after as string)
+    .filter((value) => new Date(value).getTime() > now)
     .sort()[0]
 
   return (

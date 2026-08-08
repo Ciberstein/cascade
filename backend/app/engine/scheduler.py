@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.engine.downloader import FLUSH_INTERVAL_SECONDS
 from app.engine.item_runner import run_download_item
 from app.engine.progress import ThrottledBroadcaster
+from app.paths import ensure_within, safe_filename
 from app.engine.rate_limiter import limiter
 from app.models import Chunk, DownloadItem, Package
 from app.plugins.base import DirectLink, RateLimited
@@ -41,7 +42,11 @@ async def resume_stale_running_items(db: AsyncSession) -> None:
 
 def _dest_path(item: DownloadItem) -> str:
     package_dir = item.package.target_dir if item.package else "/downloads"
-    return os.path.join(package_dir, item.filename)
+    # Doble barrera con safe_filename del crawler, a propósito: esta corre
+    # justo antes de crear el directorio y abrir el archivo, así que también
+    # cubre items que hayan entrado por otro camino. Si algo escapó, el item
+    # falla en vez de escribir fuera de su paquete.
+    return ensure_within(package_dir, os.path.join(package_dir, safe_filename(item.filename)))
 
 
 async def _write_checkpoint(
@@ -236,6 +241,10 @@ async def _run_one_item(
             item.total_size = result.total_size
             item.downloaded_bytes = downloaded_so_far
             item.status = "completed"
+            # Se limpia al llegar a un estado final: si quedara, la UI seguiría
+            # anunciando "esperando hasta HH:MM" sobre un item ya terminado, y
+            # ese valor viejo taparía la espera real de un item hermano.
+            item.retry_after = None
             for chunk in chunks_ref:
                 chunk.status = "completed"
                 chunk.downloaded_bytes = chunk.range_end - chunk.range_start + 1
@@ -259,6 +268,7 @@ async def _run_one_item(
             # commit too.
             await db.rollback()
             item.status = "error"
+            item.retry_after = None  # mismo motivo que en el camino de éxito
             item.error_message = str(exc)
             # Keep the durable offsets rather than the optimistic byte counter:
             # a user who retries this item should pick up from what is actually

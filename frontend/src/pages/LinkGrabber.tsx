@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCrawlJob, promoteResults } from '../api/crawl'
 import { UnauthorizedError } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
@@ -18,6 +18,7 @@ const POLL_INTERVAL_MS = 1000
 export default function LinkGrabber({ jobId, onDone, onBack, onUnauthorized }: Props) {
   const [job, setJob] = useState<CrawlJob | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const selectionInitialized = useRef(false)
   const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -30,9 +31,15 @@ export default function LinkGrabber({ jobId, onDone, onBack, onUnauthorized }: P
       setJob(fetched)
       // Los muertos quedan visibles pero fuera de la selección: tildarlos solo
       // encola un fallo garantizado.
-      setSelected((prev) =>
-        prev.size > 0 ? prev : new Set(fetched.results.filter((r) => r.status === 'ok').map((r) => r.id)),
-      )
+      //
+      // La marca explícita, y no "prev.size > 0": mientras el job corre el
+      // sondeo sigue activo, así que usar "está vacío" como sinónimo de "sin
+      // inicializar" hace que destildar la última casilla vuelva a tildarlas
+      // todas un segundo después.
+      if (!selectionInitialized.current && fetched.results.length > 0) {
+        selectionInitialized.current = true
+        setSelected(new Set(fetched.results.filter((r) => r.status === 'ok').map((r) => r.id)))
+      }
     } catch (e) {
       if (e instanceof UnauthorizedError) {
         onUnauthorized?.()

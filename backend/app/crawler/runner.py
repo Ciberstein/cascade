@@ -12,6 +12,21 @@ from app.models import CrawlJob, CrawlResult
 logger = logging.getLogger(__name__)
 
 
+async def requeue_stale_running_jobs(db: AsyncSession) -> None:
+    """Devuelve a "pending" los jobs que un proceso anterior dejó en "running".
+
+    La consulta de trabajo solo mira "pending", así que sin esto un reinicio a
+    mitad de un crawl deja el job colgado para siempre y la bandeja mostrando
+    "Buscando..." sin forma de distinguirlo de un crawl lento. Reencolarlo es
+    seguro: crawlear no escribe nada fuera de crawl_results, y los resultados
+    ya guardados se agregan a los que encuentre esta vez.
+    """
+    result = await db.execute(select(CrawlJob).where(CrawlJob.status == "running"))
+    for job in result.scalars().all():
+        job.status = "pending"
+    await db.commit()
+
+
 async def run_pending_crawls(db: AsyncSession, max_concurrent: int) -> None:
     """Procesa hasta `max_concurrent` jobs pendientes.
 
@@ -34,7 +49,12 @@ async def run_pending_crawls(db: AsyncSession, max_concurrent: int) -> None:
             job.status = "running"
         await db.commit()
 
-    await asyncio.gather(*(_run_one_job(db, db_lock, job) for job in jobs))
+    # return_exceptions=True a diferencia del scheduler: acá no hay motivo para
+    # que un job aborte el lote. Sin esto, el primer fallo hace que gather
+    # vuelva de inmediato, _crawl_tick cierra la sesión, y los jobs hermanos
+    # siguen vivos escribiendo sobre una conexión ya devuelta al pool - la
+    # misma corrupción de sesión compartida que Fase 1 existe para evitar.
+    await asyncio.gather(*(_run_one_job(db, db_lock, job) for job in jobs), return_exceptions=True)
 
 
 async def _run_one_job(db: AsyncSession, db_lock: asyncio.Lock, job: CrawlJob) -> None:
@@ -50,21 +70,34 @@ async def _run_one_job(db: AsyncSession, db_lock: asyncio.Lock, job: CrawlJob) -
             logger.exception("crawl of %s failed", link)
             discovered.append(_error_row(link, str(exc)))
 
-    async with db_lock:
-        for found in discovered:
-            db.add(
-                CrawlResult(
-                    crawl_job_id=job.id,
-                    url=found.url,
-                    filename=found.filename,
-                    size=found.size,
-                    hoster=found.hoster,
-                    status=found.status,
-                    error_message=found.error_message,
+    try:
+        async with db_lock:
+            for found in discovered:
+                db.add(
+                    CrawlResult(
+                        crawl_job_id=job.id,
+                        url=found.url,
+                        filename=found.filename,
+                        size=found.size,
+                        hoster=found.hoster,
+                        status=found.status,
+                        error_message=found.error_message,
+                    )
                 )
-            )
-        job.status = "done"
-        await db.commit()
+            job.status = "done"
+            await db.commit()
+    except Exception as exc:  # noqa: BLE001 - el job debe terminar en un estado final
+        # Sin esto el job se queda en "running" para siempre: la consulta solo
+        # levanta "pending" y nada lo reencola. La bandeja seguiría mostrando
+        # "Buscando..." indefinidamente, sin forma de distinguirlo de un crawl
+        # lento ni de limpiarlo. Un INSERT rechazado por Postgres (un tamaño
+        # que no es entero, un filename más largo que la columna) llega acá.
+        logger.exception("no se pudieron guardar los resultados del job %s", job.id)
+        async with db_lock:
+            await db.rollback()
+            job.status = "error"
+            job.error_message = str(exc)
+            await db.commit()
 
 
 def _error_row(url: str, message: str):

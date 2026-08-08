@@ -136,3 +136,40 @@ test('does not claim a wait when there is none', () => {
   render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} />)
   expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
 })
+
+test('does not announce a wait for an item that already finished', () => {
+  // Un retry_after viejo sobre un item completado mostraba "esperando hasta"
+  // para siempre, y tapaba la espera real de un item hermano.
+  const stale: Package = {
+    ...pkg,
+    items: [
+      {
+        ...pkg.items[0],
+        status: 'completed',
+        retry_after: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      },
+    ],
+  }
+
+  render(<PackageRow package={stale} onPause={noop} onResume={noop} onCancel={noop} />)
+
+  expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
+})
+
+test('does not announce a wait whose time already passed', () => {
+  const past: Package = {
+    ...pkg,
+    status: 'queued',
+    items: [
+      {
+        ...pkg.items[0],
+        status: 'queued',
+        retry_after: new Date(Date.now() - 60 * 1000).toISOString(),
+      },
+    ],
+  }
+
+  render(<PackageRow package={past} onPause={noop} onResume={noop} onCancel={noop} />)
+
+  expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
+})

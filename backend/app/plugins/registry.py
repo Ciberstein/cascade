@@ -22,11 +22,30 @@ class Registry:
     def __init__(self, plugins: list[Hoster]):
         self._plugins = plugins
 
-    def find(self, url: str) -> Hoster:
+    def candidates(self, url: str) -> list[Hoster]:
+        """Todos los plugins que aceptan `url`, en orden, con `direct` al final.
+
+        Devuelve la lista y no el primero porque un plugin puede aceptar una
+        URL y después descubrir que no era suya (`UnsupportedLink`): quien
+        llama sigue probando hasta que alguno responda, y `direct` cierra.
+        """
+        accepted = []
         for plugin in self._plugins:
-            if plugin.can_handle(url):
-                return plugin
-        raise PluginError(f"ningún plugin acepta {url}")  # imposible con direct presente
+            try:
+                if plugin.can_handle(url):
+                    accepted.append(plugin)
+            except Exception:  # noqa: BLE001 - código de terceros, y encima fuera del guard
+                # can_handle es lo primero que corre de cada plugin y es la
+                # única entrada que no pasa por _guard. Un regex malo acá
+                # tumbaría la búsqueda entera en vez de descartar un plugin.
+                logger.exception("can_handle de %s falló sobre %s", plugin.name, url)
+        return accepted
+
+    def find(self, url: str) -> Hoster:
+        candidates = self.candidates(url)
+        if not candidates:
+            raise PluginError(f"ningún plugin acepta {url}")  # imposible con direct presente
+        return candidates[0]
 
     def get(self, name: str) -> Hoster | None:
         for plugin in self._plugins:
