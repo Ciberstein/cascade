@@ -66,6 +66,7 @@ class SettingsResponse(BaseModel):
     max_concurrent_downloads: int
     chunks_per_file: int
     max_speed_kbps: int
+    max_concurrent_crawls: int
 
     model_config = {"from_attributes": True}
 
@@ -75,6 +76,7 @@ class UpdateSettingsRequest(BaseModel):
     max_concurrent_downloads: int = Field(ge=1, le=20)
     chunks_per_file: int = Field(ge=1, le=16)
     max_speed_kbps: int = Field(ge=0)
+    max_concurrent_crawls: int = Field(ge=1, le=20)
 
 
 class CreateCrawlJobRequest(BaseModel):

@@ -10,9 +10,12 @@ from app.api.crawl_jobs import router as crawl_jobs_router
 from app.api.packages import router as packages_router
 from app.api.settings import router as settings_router
 from app.config import Settings
+from app.crawler.runner import run_pending_crawls
 from app.database import SessionLocal
 from app.engine.rate_limiter import limiter
 from app.engine.scheduler import resume_stale_running_items, run_pending
+from app.plugins.base import DirectLink
+from app.plugins.registry import call_resolve, registry
 from app.settings_store import read_settings
 from app.ws.routes import router as ws_router
 
@@ -28,10 +31,23 @@ _settings = Settings()
 # instead of spinning.
 _POLL_INTERVAL_SECONDS = 2.0
 
+#: Los crawls son cortos y el usuario está mirando la bandeja, así que se
+#: sondea más seguido que las descargas.
+_CRAWL_POLL_INTERVAL_SECONDS = 1.0
 
-def _identity(url: str) -> str:
-    """Placeholder URL resolver - Fase 2 replaces this with the hoster plugins."""
-    return url
+#: Se levanta al apagar. Los loops lo miran entre ticks, nunca a mitad de uno.
+_stop_loops = asyncio.Event()
+
+
+async def _resolve(url: str, hoster: str) -> DirectLink:
+    """Devuelve la URL directa usando el plugin con el que se encoló el item.
+
+    Si ese plugin ya no existe (renombrado o eliminado entre que se encoló y
+    que se levantó), se vuelve a matchear por URL en vez de fallar el item:
+    en el peor caso cae en `direct`, que es exactamente lo que hacía Fase 1.
+    """
+    plugin = registry.get(hoster) or registry.find(url)
+    return await call_resolve(plugin, url)
 
 
 async def _effective_limits(db: "AsyncSession") -> tuple[int, int]:
@@ -64,12 +80,21 @@ async def _scheduler_tick() -> None:
             db,
             max_concurrent=max_concurrent,
             chunks_per_file=chunks_per_file,
-            identity=_identity,
+            resolver=_resolve,
         )
 
 
 async def _scheduler_loop() -> None:
-    while True:
+    # Se reemplaza por un Event nuevo al arrancar, no solo .clear(): el
+    # flag es un singleton de módulo y un `asyncio.Event` queda atado al
+    # primer event loop que lo espera. Un lifespan previo (o un test) puede
+    # haberlo dejado en set() al apagarse, y además cada test de pytest-
+    # asyncio corre en su propio event loop - reusar el mismo objeto
+    # lanzaría "bound to a different event loop" en el segundo test que
+    # lo espera. Un Event nuevo evita ambos problemas.
+    global _stop_loops
+    _stop_loops = asyncio.Event()
+    while not _stop_loops.is_set():
         try:
             # Awaited to completion before the next iteration starts: run_pending
             # documents a single-flight precondition (it builds a fresh db_lock
@@ -80,7 +105,39 @@ async def _scheduler_loop() -> None:
             # CancelledError is a BaseException, so shutdown still propagates
             # out of here and ends the task as intended.
             logger.exception("scheduler tick failed; retrying after the poll interval")
-        await asyncio.sleep(_POLL_INTERVAL_SECONDS)
+        with suppress(TimeoutError):
+            # wait_for sobre el flag en vez de sleep: apagar no espera un
+            # intervalo entero, y despertar temprano es seguro porque el chequeo
+            # del while ocurre antes del próximo tick.
+            await asyncio.wait_for(_stop_loops.wait(), timeout=_POLL_INTERVAL_SECONDS)
+
+
+async def _effective_crawl_limit(db: "AsyncSession") -> int:
+    row = await read_settings(db)
+    if row is None:
+        return _settings.max_concurrent_crawls
+    return row.max_concurrent_crawls
+
+
+async def _crawl_tick() -> None:
+    async with SessionLocal() as db:
+        await run_pending_crawls(db, max_concurrent=await _effective_crawl_limit(db))
+
+
+async def _crawl_loop() -> None:
+    # Mismo motivo que en _scheduler_loop: un Event nuevo al arrancar evita
+    # heredar tanto un flag ya levantado como un event loop ajeno.
+    global _stop_loops
+    _stop_loops = asyncio.Event()
+    while not _stop_loops.is_set():
+        try:
+            # Awaited hasta el final antes del siguiente ciclo: run_pending_crawls
+            # comparte la misma precondición single-flight que run_pending.
+            await _crawl_tick()
+        except Exception:  # noqa: BLE001 - un tick malo no puede matar el loop
+            logger.exception("crawl tick failed; retrying after the poll interval")
+        with suppress(TimeoutError):
+            await asyncio.wait_for(_stop_loops.wait(), timeout=_CRAWL_POLL_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
@@ -94,14 +151,20 @@ async def lifespan(app: FastAPI):
         # API unbootable for that window instead of just skipping the resume.
         logger.exception("startup resume of stale running items failed; continuing without it")
 
-    task = asyncio.create_task(_scheduler_loop()) if _settings.scheduler_enabled else None
+    tasks = []
+    if _settings.scheduler_enabled:
+        tasks.append(asyncio.create_task(_scheduler_loop()))
+        tasks.append(asyncio.create_task(_crawl_loop()))
     try:
         yield
     finally:
-        if task is not None:
-            task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+        # Parada ordenada por flag, no task.cancel(): el runner de crawl commitea,
+        # y una cancelación puede caer dentro del commit y dejar la conexión a
+        # medias, que es exactamente lo que envenenó la sesión compartida en
+        # Fase 1. El flag solo se observa entre ticks.
+        _stop_loops.set()
+        for task in tasks:
+            await task
 
 
 app = FastAPI(title="Cascade", lifespan=lifespan)

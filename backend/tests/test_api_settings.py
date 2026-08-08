@@ -16,6 +16,7 @@ async def test_get_settings_returns_defaults(auth_client):
     assert body["max_concurrent_downloads"] == 3
     assert body["chunks_per_file"] == 4
     assert body["max_speed_kbps"] == 0
+    assert body["max_concurrent_crawls"] == 5
 
 
 @pytest.mark.asyncio
@@ -33,6 +34,7 @@ async def test_put_settings_updates_values(auth_client):
             "max_concurrent_downloads": 5,
             "chunks_per_file": 8,
             "max_speed_kbps": 2048,
+            "max_concurrent_crawls": 5,
         },
     )
 
@@ -52,6 +54,7 @@ async def test_put_settings_requires_auth(client):
             "max_concurrent_downloads": 5,
             "chunks_per_file": 8,
             "max_speed_kbps": 2048,
+            "max_concurrent_crawls": 5,
         },
     )
     assert response.status_code == 401
@@ -66,6 +69,7 @@ async def test_put_settings_rejects_out_of_bounds_values(auth_client):
             "max_concurrent_downloads": 0,
             "chunks_per_file": 8,
             "max_speed_kbps": 2048,
+            "max_concurrent_crawls": 5,
         },
     )
     assert response.status_code == 422
@@ -77,6 +81,7 @@ async def test_put_settings_rejects_out_of_bounds_values(auth_client):
             "max_concurrent_downloads": 21,
             "chunks_per_file": 8,
             "max_speed_kbps": 2048,
+            "max_concurrent_crawls": 5,
         },
     )
     assert response.status_code == 422
@@ -88,6 +93,7 @@ async def test_put_settings_rejects_out_of_bounds_values(auth_client):
             "max_concurrent_downloads": 5,
             "chunks_per_file": 17,
             "max_speed_kbps": 2048,
+            "max_concurrent_crawls": 5,
         },
     )
     assert response.status_code == 422
@@ -99,6 +105,7 @@ async def test_put_settings_rejects_out_of_bounds_values(auth_client):
             "max_concurrent_downloads": 5,
             "chunks_per_file": 8,
             "max_speed_kbps": -1,
+            "max_concurrent_crawls": 5,
         },
     )
     assert response.status_code == 422

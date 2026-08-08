@@ -26,6 +26,7 @@ async def update_settings(
     row.max_concurrent_downloads = payload.max_concurrent_downloads
     row.chunks_per_file = payload.chunks_per_file
     row.max_speed_kbps = payload.max_speed_kbps
+    row.max_concurrent_crawls = payload.max_concurrent_crawls
     await db.commit()
     await db.refresh(row)
     return row
