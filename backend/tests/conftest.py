@@ -4,6 +4,10 @@ os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://cascade:cascade@loca
 os.environ.setdefault("JWT_SECRET", "test-secret")
 os.environ.setdefault("ADMIN_USERNAME", "admin")
 os.environ.setdefault("ADMIN_PASSWORD", "hunter2")
+# Tests drive the scheduler directly (tests/test_scheduler.py) against a
+# sqlite session; the background loop would only poll the unreachable
+# DATABASE_URL above every 2s for the length of the run.
+os.environ.setdefault("SCHEDULER_ENABLED", "false")
 
 import pytest
 import pytest_asyncio
