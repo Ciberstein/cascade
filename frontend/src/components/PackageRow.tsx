@@ -35,6 +35,12 @@ export default function PackageRow({
   const percent = percentOf(downloaded, totalSize)
   const finished = FINISHED.has(pkg.status)
 
+  // El primero que vuelve es el que define cuándo el paquete se mueve otra vez.
+  const waitingUntil = pkg.items
+    .map((i) => i.retry_after)
+    .filter((value): value is string => value !== null)
+    .sort()[0]
+
   return (
     <div className="package-row">
       <div className="package-row__header">
@@ -54,6 +60,11 @@ export default function PackageRow({
       />
 
       <div className="package-row__actions">
+        {waitingUntil && (
+          <span className="package-row__waiting">
+            esperando hasta {new Date(waitingUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
         {pkg.status === 'running' && <button onClick={() => onPause(pkg.id)}>Pausar</button>}
         {pkg.status === 'paused' && <button onClick={() => onResume(pkg.id)}>Reanudar</button>}
         {!finished && (

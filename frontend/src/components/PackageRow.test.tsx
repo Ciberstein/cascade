@@ -17,6 +17,8 @@ const pkg: Package = {
       total_size: 1000,
       downloaded_bytes: 400,
       error_message: null,
+      hoster: 'direct',
+      retry_after: null,
     },
     {
       id: 'i2',
@@ -26,6 +28,8 @@ const pkg: Package = {
       total_size: 500,
       downloaded_bytes: 500,
       error_message: null,
+      hoster: 'direct',
+      retry_after: null,
     },
   ],
 }
@@ -106,4 +110,29 @@ test('hides cancel once the package is finished', () => {
   )
 
   expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+})
+
+test('shows when a waiting item resumes instead of calling it an error', () => {
+  const waiting: Package = {
+    ...pkg,
+    status: 'queued',
+    items: [
+      {
+        ...pkg.items[0],
+        status: 'queued',
+        retry_after: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      },
+    ],
+  }
+
+  render(<PackageRow package={waiting} onPause={noop} onResume={noop} onCancel={noop} />)
+
+  // "Esto está agendado" y "esto se rompió" se confunden fácil, y la confusión
+  // hace que la gente cancele descargas que iban bien.
+  expect(screen.getByText(/esperando hasta/i)).toBeInTheDocument()
+})
+
+test('does not claim a wait when there is none', () => {
+  render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} />)
+  expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
 })

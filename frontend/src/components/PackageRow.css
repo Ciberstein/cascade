@@ -44,3 +44,10 @@
   border-color: var(--danger);
   color: var(--danger);
 }
+
+.package-row__waiting {
+  align-self: center;
+  margin-right: auto;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
