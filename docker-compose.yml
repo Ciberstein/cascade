@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: cascade
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cascade}
+      POSTGRES_DB: cascade
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cascade"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://cascade:${POSTGRES_PASSWORD:-cascade}@postgres:5432/cascade
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Only the default for a fresh install - once the settings row exists,
+      # the download folder saved from the UI wins.
+      DOWNLOAD_ROOT: /downloads
+    volumes:
+      - downloads:/downloads
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+volumes:
+  pg_data:
+  downloads:

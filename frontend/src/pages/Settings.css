@@ -1,0 +1,46 @@
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 30rem;
+}
+
+.settings__title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.settings__field label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.settings__hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.settings__error {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--danger);
+}
+
+.settings__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.settings__primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
