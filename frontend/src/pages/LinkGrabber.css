@@ -1,0 +1,95 @@
+.grabber {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.grabber__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.grabber__title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.grabber__pending {
+  margin: 0;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.grabber__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grabber__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.grabber__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.grabber__size,
+.grabber__hoster {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.grabber__why {
+  font-size: 0.8rem;
+  color: var(--danger);
+}
+
+.grabber__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.grabber__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1;
+}
+
+.grabber__field label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.grabber__error {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--danger);
+}
+
+.grabber__primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
