@@ -24,6 +24,27 @@ async def test_scheduler_limits_follow_the_settings_row(session):
 
 
 @pytest.mark.asyncio
+async def test_the_speed_cap_follows_the_settings_row(session):
+    from app.engine.rate_limiter import limiter
+
+    session.add(GlobalSettings(id=1, max_speed_kbps=500))
+    await session.commit()
+
+    await _effective_limits(session)
+
+    # Stored in KB/s, enforced in bytes/s.
+    assert limiter.rate_bytes_per_second == 500 * 1024
+
+    row = await session.get(GlobalSettings, 1)
+    row.max_speed_kbps = 0
+    await session.commit()
+    await _effective_limits(session)
+
+    # 0 means "sin límite", not "stall every download".
+    assert limiter.rate_bytes_per_second == 0
+
+
+@pytest.mark.asyncio
 async def test_download_root_falls_back_to_env_on_a_fresh_install(session):
     assert await _target_dir_root(session) == "/downloads"
 

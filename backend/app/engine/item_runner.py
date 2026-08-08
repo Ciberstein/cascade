@@ -8,6 +8,7 @@ import httpx
 
 from app.engine.chunker import split_into_chunks
 from app.engine.downloader import FLUSH_INTERVAL_SECONDS, download_chunk
+from app.engine.rate_limiter import RateLimiter
 
 
 @dataclass
@@ -39,6 +40,7 @@ async def run_download_item(
     on_chunks_planned: Callable[[list[tuple[int, int]]], Awaitable[None] | None] | None = None,
     on_checkpoint: Callable[[int, int], None] | None = None,
     flush_interval_seconds: float = FLUSH_INTERVAL_SECONDS,
+    rate_limiter: RateLimiter | None = None,
 ) -> ItemResult:
     """Download `url` to `dest_path`, optionally resuming from prior progress.
 
@@ -95,6 +97,7 @@ async def run_download_item(
             on_bytes=_on_bytes if on_progress is not None else None,
             on_flush=_on_flush if on_checkpoint is not None else None,
             flush_interval_seconds=flush_interval_seconds,
+            rate_limiter=rate_limiter,
         )
 
     await asyncio.gather(

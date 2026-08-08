@@ -10,6 +10,7 @@ from app.api.packages import router as packages_router
 from app.api.settings import router as settings_router
 from app.config import Settings
 from app.database import SessionLocal
+from app.engine.rate_limiter import limiter
 from app.engine.scheduler import resume_stale_running_items, run_pending
 from app.settings_store import read_settings
 from app.ws.routes import router as ws_router
@@ -36,11 +37,17 @@ async def _effective_limits(db: "AsyncSession") -> tuple[int, int]:
     """(max_concurrent_downloads, chunks_per_file), preferring the settings row.
 
     Read per tick rather than cached at import: a change saved from the
-    Settings page has to take effect without restarting the container.
+    Settings page has to take effect without restarting the container. Also
+    syncs the shared speed limiter for the same reason - the limiter reads its
+    rate on every acquire, so a change lands on downloads already in flight.
     """
     row = await read_settings(db)
     if row is None:
+        limiter.set_rate(0)  # fresh install: no row yet, so no cap
         return _settings.max_concurrent_downloads, _settings.chunks_per_file
+
+    if limiter.rate_bytes_per_second != row.max_speed_kbps * 1024:
+        limiter.set_rate(row.max_speed_kbps * 1024)
     return row.max_concurrent_downloads, row.chunks_per_file
 
 

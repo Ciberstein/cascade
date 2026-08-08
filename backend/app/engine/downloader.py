@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 import httpx
 
+from app.engine.rate_limiter import RateLimiter
+
 #: How often the output file is flushed and a resumable offset reported.
 FLUSH_INTERVAL_SECONDS = 2.0
 
@@ -19,6 +21,7 @@ async def download_chunk(
     on_bytes: Callable[[int], None] | None = None,
     on_flush: Callable[[int], None] | None = None,
     flush_interval_seconds: float = FLUSH_INTERVAL_SECONDS,
+    rate_limiter: RateLimiter | None = None,
 ) -> None:
     """Download `start`-`end` of `url` into `dest_path` at its true offset.
 
@@ -68,6 +71,14 @@ async def download_chunk(
                     with open(dest_path, "r+b") as f:
                         f.seek(range_start)
                         async for data in response.aiter_bytes():
+                            if rate_limiter is not None:
+                                # After the read, not before: the bytes are
+                                # already off the socket, so throttling here
+                                # slows the loop (and therefore the connection,
+                                # via TCP backpressure) without ever discarding
+                                # data that has been received.
+                                await rate_limiter.acquire(len(data))
+
                             f.write(data)
                             written += len(data)
                             if on_bytes is not None:

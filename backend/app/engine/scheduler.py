@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.engine.downloader import FLUSH_INTERVAL_SECONDS
 from app.engine.item_runner import run_download_item
 from app.engine.progress import ThrottledBroadcaster
+from app.engine.rate_limiter import limiter
 from app.models import Chunk, DownloadItem, Package
 from app.ws.manager import manager
 
@@ -206,6 +207,9 @@ async def _run_one_item(
                 on_chunks_planned=on_chunks_planned,
                 on_checkpoint=on_checkpoint,
                 flush_interval_seconds=FLUSH_INTERVAL_SECONDS,
+                # The one process-wide limiter, so the configured speed is a
+                # total across every concurrent chunk of every running item.
+                rate_limiter=limiter,
             )
         finally:
             # Stopped before the finalizing commit below so it can't interleave
