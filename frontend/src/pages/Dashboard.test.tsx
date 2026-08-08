@@ -138,6 +138,7 @@ test('opens and closes the settings view', async () => {
     max_concurrent_downloads: 3,
     chunks_per_file: 4,
     max_speed_kbps: 0,
+    max_concurrent_crawls: 5,
   })
   stubSocket()
 

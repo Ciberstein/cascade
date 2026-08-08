@@ -33,6 +33,7 @@ export interface AppSettings {
   chunks_per_file: number
   /** 0 means unlimited. */
   max_speed_kbps: number
+  max_concurrent_crawls: number
 }
 
 export type CrawlJobStatus = 'pending' | 'running' | 'done' | 'error'

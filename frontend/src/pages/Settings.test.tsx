@@ -11,6 +11,7 @@ const saved: AppSettings = {
   max_concurrent_downloads: 3,
   chunks_per_file: 4,
   max_speed_kbps: 0,
+  max_concurrent_crawls: 5,
 }
 
 test('loads existing settings and submits updates', async () => {
@@ -68,4 +69,19 @@ test('does not send a half-typed number field as 0', async () => {
 
   await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
   expect(updateSpy).not.toHaveBeenCalled()
+})
+
+test('saves the crawl concurrency limit', async () => {
+  vi.spyOn(settingsApi, 'getSettings').mockResolvedValue(saved)
+  const updateSpy = vi.spyOn(settingsApi, 'updateSettings').mockResolvedValue(saved)
+
+  render(<Settings onClose={() => {}} />)
+  await waitFor(() => expect(screen.getByLabelText('Análisis simultáneos')).toHaveValue(5))
+
+  fireEvent.change(screen.getByLabelText('Análisis simultáneos'), { target: { value: '8' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar' }))
+
+  await waitFor(() =>
+    expect(updateSpy).toHaveBeenCalledWith({ ...saved, max_concurrent_crawls: 8 }),
+  )
 })

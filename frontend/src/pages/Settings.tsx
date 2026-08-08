@@ -14,9 +14,10 @@ const BOUNDS: Record<NumericKey, { min: number; max?: number }> = {
   max_concurrent_downloads: { min: 1, max: 20 },
   chunks_per_file: { min: 1, max: 16 },
   max_speed_kbps: { min: 0 },
+  max_concurrent_crawls: { min: 1, max: 20 },
 }
 
-type NumericKey = 'max_concurrent_downloads' | 'chunks_per_file' | 'max_speed_kbps'
+type NumericKey = 'max_concurrent_downloads' | 'chunks_per_file' | 'max_speed_kbps' | 'max_concurrent_crawls'
 
 export default function Settings({ onClose, onUnauthorized }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -27,6 +28,7 @@ export default function Settings({ onClose, onUnauthorized }: Props) {
     max_concurrent_downloads: '',
     chunks_per_file: '',
     max_speed_kbps: '',
+    max_concurrent_crawls: '',
   })
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -39,6 +41,7 @@ export default function Settings({ onClose, onUnauthorized }: Props) {
           max_concurrent_downloads: String(loaded.max_concurrent_downloads),
           chunks_per_file: String(loaded.chunks_per_file),
           max_speed_kbps: String(loaded.max_speed_kbps),
+          max_concurrent_crawls: String(loaded.max_concurrent_crawls),
         })
       })
       .catch((e: unknown) => {
@@ -108,6 +111,14 @@ export default function Settings({ onClose, onUnauthorized }: Props) {
         label="Descargas simultáneas"
         field="max_concurrent_downloads"
         value={numeric.max_concurrent_downloads}
+        onChange={setNumeric}
+      />
+
+      <NumberField
+        id="max-crawls"
+        label="Análisis simultáneos"
+        field="max_concurrent_crawls"
+        value={numeric.max_concurrent_crawls}
         onChange={setNumeric}
       />
 
