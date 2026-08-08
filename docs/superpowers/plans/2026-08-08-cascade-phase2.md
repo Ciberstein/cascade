@@ -255,7 +255,20 @@ async def test_direct_crawl_reports_the_url_as_a_single_file():
 @pytest.mark.asyncio
 async def test_direct_crawl_falls_back_to_a_usable_filename():
     result = await PLUGIN.crawl("http://example.com/")
+    # No "example.com": guardar el archivo con el nombre del host sería peor
+    # que un nombre genérico.
     assert result.files[0].filename == "download"
+
+
+@pytest.mark.asyncio
+async def test_two_trailing_slash_urls_do_not_collapse_to_the_same_name():
+    a = await PLUGIN.crawl("http://x/files/")
+    b = await PLUGIN.crawl("http://x/other/")
+
+    # Ambos van a la misma carpeta del paquete: si los dos se llamaran
+    # "download", el segundo pisaría al primero en el disco sin aviso.
+    assert a.files[0].filename == "files"
+    assert b.files[0].filename == "other"
 
 
 @pytest.mark.asyncio
@@ -279,11 +292,21 @@ Existe como plugin en vez de como caso especial para que el resto del código
 nunca tenga que ramificar entre "con plugin" y "sin plugin".
 """
 
+from urllib.parse import urlparse
+
 from app.plugins.base import CrawledFile, CrawlResult, DirectLink
 
 
 def filename_from_url(url: str) -> str:
-    name = url.rstrip("/").rsplit("/", 1)[-1]
+    """Último segmento del path de la URL, con "download" como último recurso.
+
+    Se mira el path y no la URL entera: para "http://example.com/" la URL
+    completa dejaría "example.com", es decir, guardaría el archivo con el
+    nombre del host. Y se recortan las barras finales antes de partir porque,
+    sin eso, toda URL terminada en "/" caería en "download" y dos carpetas
+    distintas del mismo paquete se pisarían entre sí en el disco.
+    """
+    name = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
     return name or "download"
 
 
