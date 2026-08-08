@@ -6,6 +6,11 @@ from sqlalchemy.exc import SAWarning
 
 from app.engine.scheduler import resume_stale_running_items, run_pending
 from app.models import Chunk, DownloadItem, Package
+from app.plugins.base import DirectLink
+
+
+async def _direct_resolver(url: str, hoster: str) -> DirectLink:
+    return DirectLink(url=url)
 
 
 @pytest.mark.asyncio
@@ -20,7 +25,7 @@ async def test_run_pending_downloads_queued_item_end_to_end(session, test_server
     session.add(item)
     await session.commit()
 
-    await run_pending(session, max_concurrent=2, chunks_per_file=4, identity=lambda u: u)
+    await run_pending(session, max_concurrent=2, chunks_per_file=4, resolver=_direct_resolver)
 
     await session.refresh(item)
     await session.refresh(package)
@@ -53,7 +58,7 @@ async def test_run_pending_respects_concurrency_limit(session, test_server, tmp_
         session,
         max_concurrent=2,
         chunks_per_file=1,
-        identity=lambda u: u,
+        resolver=_direct_resolver,
         _on_start_for_test=lambda item_id: started.append(item_id),
     )
 
@@ -88,7 +93,7 @@ async def test_run_pending_concurrent_items_do_not_corrupt_shared_session(sessio
         await session.commit()
 
         # Should not raise SAWarning-turned-error even under real concurrency
-        await run_pending(session, max_concurrent=2, chunks_per_file=2, identity=lambda u: u)
+        await run_pending(session, max_concurrent=2, chunks_per_file=2, resolver=_direct_resolver)
 
     result = await session.execute(select(DownloadItem).where(DownloadItem.package_id == package.id))
     assert all(i.status == "completed" for i in result.scalars().all())

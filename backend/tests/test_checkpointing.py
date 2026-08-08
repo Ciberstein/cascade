@@ -13,6 +13,11 @@ from app.engine.downloader import download_chunk
 from app.engine.item_runner import run_download_item
 from app.engine.scheduler import _write_checkpoint, resume_stale_running_items, run_pending
 from app.models import Chunk, DownloadItem, Package
+from app.plugins.base import DirectLink
+
+
+async def _direct_resolver(url: str, hoster: str) -> DirectLink:
+    return DirectLink(url=url)
 
 
 @pytest.mark.asyncio
@@ -155,7 +160,7 @@ async def test_progress_is_committed_while_the_download_is_still_running(
 
     monkeypatch.setattr(scheduler, "_write_checkpoint", recording_checkpoint)
 
-    await run_pending(session, max_concurrent=1, chunks_per_file=2, identity=lambda u: u)
+    await run_pending(session, max_concurrent=1, chunks_per_file=2, resolver=_direct_resolver)
 
     assert committed_sums, "no checkpoint was committed during the download"
     assert any(0 < total < len(payload) for total in committed_sums), (
@@ -202,7 +207,7 @@ async def test_a_restart_resumes_from_the_persisted_checkpoints(session, test_se
                      + b"\x00" * (len(payload) - half - 2000))
 
     await resume_stale_running_items(session)
-    await run_pending(session, max_concurrent=1, chunks_per_file=2, identity=lambda u: u)
+    await run_pending(session, max_concurrent=1, chunks_per_file=2, resolver=_direct_resolver)
 
     await session.refresh(item)
     assert item.status == "completed"

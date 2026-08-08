@@ -1,8 +1,9 @@
 import asyncio
+import datetime as dt
 import logging
 import os
 from contextlib import suppress
-from typing import Callable
+from typing import Awaitable, Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,7 @@ from app.engine.item_runner import run_download_item
 from app.engine.progress import ThrottledBroadcaster
 from app.engine.rate_limiter import limiter
 from app.models import Chunk, DownloadItem, Package
+from app.plugins.base import DirectLink, RateLimited
 from app.ws.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -98,7 +100,7 @@ async def _run_one_item(
     db_lock: asyncio.Lock,
     item: DownloadItem,
     chunks_per_file: int,
-    identity: Callable[[str], str],
+    resolver: Callable[[str, str], Awaitable[DirectLink]],
 ) -> None:
     async with db_lock:
         item.status = "running"
@@ -115,7 +117,7 @@ async def _run_one_item(
 
     try:
         # Everything from here through the success commit must stay inside
-        # this try: identity() (a future hoster-plugin URL resolver),
+        # this try: resolver() (the hoster-plugin URL resolver),
         # os.makedirs (PermissionError/OSError on a bad filename), and the
         # locked chunk-lookup db.execute() can all raise. If any of them
         # escaped uncaught, it would propagate through this item's Task,
@@ -124,7 +126,10 @@ async def _run_one_item(
         # download and package-completion check too - not just this one
         # item's. Catching broadly here keeps a single item's failure
         # contained to that item.
-        resolved_url = identity(item.url)
+        # Resolver acá y no al agregar: las URLs directas caducan, así que la
+        # que sirve es la que se pide justo antes de bajar.
+        direct = await resolver(item.url, item.hoster)
+        resolved_url = direct.url
         dest_path = _dest_path(item)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
@@ -210,6 +215,7 @@ async def _run_one_item(
                 # The one process-wide limiter, so the configured speed is a
                 # total across every concurrent chunk of every running item.
                 rate_limiter=limiter,
+                headers=direct.headers,
             )
         finally:
             # Stopped before the finalizing commit below so it can't interleave
@@ -233,6 +239,16 @@ async def _run_one_item(
             for chunk in chunks_ref:
                 chunk.status = "completed"
                 chunk.downloaded_bytes = chunk.range_end - chunk.range_start + 1
+            await db.commit()
+    except RateLimited as exc:
+        async with db_lock:
+            await db.rollback()
+            # Vuelve a queued, no a error: el hoster no falló, pidió esperar.
+            # Un estado propio obligaría a moverlo de ida y vuelta con dos
+            # transiciones más que pueden fallar.
+            item.status = "queued"
+            item.retry_after = exc.retry_at
+            item.error_message = None
             await db.commit()
     except Exception as exc:  # noqa: BLE001 - persist failure state, don't crash run_pending
         async with db_lock:
@@ -270,7 +286,7 @@ async def run_pending(
     db: AsyncSession,
     max_concurrent: int,
     chunks_per_file: int,
-    identity: Callable[[str], str],
+    resolver: Callable[[str, str], Awaitable[DirectLink]],
     _on_start_for_test: Callable[[str], None] | None = None,
 ) -> None:
     """Pick up to `max_concurrent` queued items and download them concurrently.
@@ -297,8 +313,16 @@ async def run_pending(
     """
     db_lock = asyncio.Lock()
 
+    now = dt.datetime.utcnow()
     result = await db.execute(
-        select(DownloadItem).where(DownloadItem.status == "queued").limit(max_concurrent)
+        select(DownloadItem)
+        .where(
+            DownloadItem.status == "queued",
+            # Un item agendado sigue en "queued": es trabajo pendiente que
+            # todavía no toca, no un estado aparte.
+            (DownloadItem.retry_after.is_(None)) | (DownloadItem.retry_after <= now),
+        )
+        .limit(max_concurrent)
     )
     items = result.scalars().all()
 
@@ -307,7 +331,7 @@ async def run_pending(
         if _on_start_for_test:
             _on_start_for_test(item.id)
 
-    await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, identity) for item in items))
+    await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, resolver) for item in items))
 
     package_ids = {item.package_id for item in items}
     for package_id in package_ids:
