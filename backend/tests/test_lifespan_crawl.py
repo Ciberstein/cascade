@@ -54,3 +54,46 @@ async def test_crawl_concurrency_follows_the_settings_row(session):
 @pytest.mark.asyncio
 async def test_crawl_concurrency_falls_back_on_a_fresh_install(session):
     assert await main._effective_crawl_limit(session) == 5
+
+
+@pytest.mark.asyncio
+async def test_setting_the_stop_flag_ends_both_loops_promptly(monkeypatch):
+    """Apagar no debe esperar a que venza el intervalo de sondeo.
+
+    Regresión: con el flag como global de módulo, cada loop lo reemplazaba al
+    arrancar, así que el segundo en iniciar dejaba al primero esperando un
+    Event que nadie iba a levantar - y ese primero solo se enteraba del apagado
+    cuando su propio timeout vencía.
+    """
+
+    async def noop():
+        return None
+
+    monkeypatch.setattr(main, "_scheduler_tick", noop)
+    monkeypatch.setattr(main, "_crawl_tick", noop)
+    monkeypatch.setattr(main, "_POLL_INTERVAL_SECONDS", 30)
+    monkeypatch.setattr(main, "_CRAWL_POLL_INTERVAL_SECONDS", 30)
+
+    stop = asyncio.Event()
+    tasks = [
+        asyncio.create_task(main._scheduler_loop(stop)),
+        asyncio.create_task(main._crawl_loop(stop)),
+    ]
+    await asyncio.sleep(0.05)
+    stop.set()
+
+    # Con intervalos de 30s, cualquier loop que no despierte con el flag
+    # agotaría este wait_for.
+    await asyncio.wait_for(asyncio.gather(*tasks), timeout=2.0)
+
+
+@pytest.mark.asyncio
+async def test_each_loop_gets_its_own_flag_when_none_is_passed():
+    """Sin esto, un Event de módulo quedaría atado al event loop del primer
+    test que lo esperara y el siguiente fallaría con "bound to a different
+    event loop"."""
+    task = asyncio.create_task(main._crawl_loop())
+    await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task

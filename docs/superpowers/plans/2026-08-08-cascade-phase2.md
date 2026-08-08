@@ -2082,7 +2082,7 @@ Expected: PASS (7 passed)
 - [ ] **Step 9: Commit**
 
 ```bash
-git add backend/app/api/crawl_jobs.py backend/app/schemas.py backend/app/main.py backend/app/api/packages.py backend/tests/test_api_crawl_jobs.py
+git add backend/app/api/crawl_jobs.py backend/app/schemas.py backend/app/main.py backend/app/api/packages.py backend/tests/conftest.py backend/tests/test_api_crawl_jobs.py
 git commit -m "feat: add crawl job endpoints and promotion to a download package"
 ```
 
@@ -2625,10 +2625,13 @@ async def _crawl_loop() -> None:
 En `lifespan`, reemplazar el bloque del task por:
 
 ```python
+    # Uno solo, compartido por ambos loops, para que apagar los despierte a los
+    # dos a la vez en lugar de que el segundo espere a que venza su intervalo.
+    stop = asyncio.Event()
     tasks = []
     if _settings.scheduler_enabled:
-        tasks.append(asyncio.create_task(_scheduler_loop()))
-        tasks.append(asyncio.create_task(_crawl_loop()))
+        tasks.append(asyncio.create_task(_scheduler_loop(stop)))
+        tasks.append(asyncio.create_task(_crawl_loop(stop)))
     try:
         yield
     finally:
@@ -2636,26 +2639,47 @@ En `lifespan`, reemplazar el bloque del task por:
         # y una cancelación puede caer dentro del commit y dejar la conexión a
         # medias, que es exactamente lo que envenenó la sesión compartida en
         # Fase 1. El flag solo se observa entre ticks.
-        _stop_loops.set()
+        stop.set()
         for task in tasks:
             await task
 ```
 
-Y declarar el flag junto a los intervalos, arriba del archivo:
+El flag entra **por parámetro**, no como global del módulo. Un `asyncio.Event` queda atado al primer event loop que lo espera, y cada test de pytest-asyncio corre en el suyo: un singleton lanzaría "bound to a different event loop" en el segundo test que lo usara, además de heredar el `set()` que dejó el lifespan anterior al apagarse.
+
+Cambiar la firma de ambos loops y su condición. En `_scheduler_loop`:
 
 ```python
-#: Se levanta al apagar. Los loops lo miran entre ticks, nunca a mitad de uno.
-_stop_loops = asyncio.Event()
+async def _scheduler_loop(stop: asyncio.Event | None = None) -> None:
+    """Corre ticks hasta que `stop` se levanta.
+
+    El Event entra por parámetro y no vive como global del módulo: un
+    `asyncio.Event` queda atado al primer event loop que lo espera, y cada
+    test de pytest-asyncio corre en el suyo, así que un singleton lanzaría
+    "bound to a different event loop" en el segundo test que lo usara -
+    además de heredar el set() que dejó el lifespan anterior al apagarse.
+    Quien no pase uno (los tests) recibe el suyo propio.
+    """
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
 ```
 
-Cambiar la condición de ambos loops para que lo respeten. En `_scheduler_loop` y en `_crawl_loop`, reemplazar `while True:` por `while not _stop_loops.is_set():`, y reemplazar la línea final `await asyncio.sleep(<intervalo>)` por:
+En `_crawl_loop`:
+
+```python
+async def _crawl_loop(stop: asyncio.Event | None = None) -> None:
+    """Mismo contrato que _scheduler_loop; ver allí por qué el Event no es global."""
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
+```
+
+Y en ambos, reemplazar la línea final `await asyncio.sleep(<intervalo>)` por:
 
 ```python
         with suppress(TimeoutError):
             # wait_for sobre el flag en vez de sleep: apagar no espera un
             # intervalo entero, y despertar temprano es seguro porque el chequeo
             # del while ocurre antes del próximo tick.
-            await asyncio.wait_for(_stop_loops.wait(), timeout=<intervalo>)
+            await asyncio.wait_for(stop.wait(), timeout=<intervalo>)
 ```
 
 usando `_POLL_INTERVAL_SECONDS` y `_CRAWL_POLL_INTERVAL_SECONDS` respectivamente.

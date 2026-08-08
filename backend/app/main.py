@@ -35,9 +35,6 @@ _POLL_INTERVAL_SECONDS = 2.0
 #: sondea más seguido que las descargas.
 _CRAWL_POLL_INTERVAL_SECONDS = 1.0
 
-#: Se levanta al apagar. Los loops lo miran entre ticks, nunca a mitad de uno.
-_stop_loops = asyncio.Event()
-
 
 async def _resolve(url: str, hoster: str) -> DirectLink:
     """Devuelve la URL directa usando el plugin con el que se encoló el item.
@@ -84,17 +81,18 @@ async def _scheduler_tick() -> None:
         )
 
 
-async def _scheduler_loop() -> None:
-    # Se reemplaza por un Event nuevo al arrancar, no solo .clear(): el
-    # flag es un singleton de módulo y un `asyncio.Event` queda atado al
-    # primer event loop que lo espera. Un lifespan previo (o un test) puede
-    # haberlo dejado en set() al apagarse, y además cada test de pytest-
-    # asyncio corre en su propio event loop - reusar el mismo objeto
-    # lanzaría "bound to a different event loop" en el segundo test que
-    # lo espera. Un Event nuevo evita ambos problemas.
-    global _stop_loops
-    _stop_loops = asyncio.Event()
-    while not _stop_loops.is_set():
+async def _scheduler_loop(stop: asyncio.Event | None = None) -> None:
+    """Corre ticks hasta que `stop` se levanta.
+
+    El Event entra por parámetro y no vive como global del módulo: un
+    `asyncio.Event` queda atado al primer event loop que lo espera, y cada
+    test de pytest-asyncio corre en el suyo, así que un singleton lanzaría
+    "bound to a different event loop" en el segundo test que lo usara -
+    además de heredar el set() que dejó el lifespan anterior al apagarse.
+    Quien no pase uno (los tests) recibe el suyo propio.
+    """
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
         try:
             # Awaited to completion before the next iteration starts: run_pending
             # documents a single-flight precondition (it builds a fresh db_lock
@@ -109,7 +107,7 @@ async def _scheduler_loop() -> None:
             # wait_for sobre el flag en vez de sleep: apagar no espera un
             # intervalo entero, y despertar temprano es seguro porque el chequeo
             # del while ocurre antes del próximo tick.
-            await asyncio.wait_for(_stop_loops.wait(), timeout=_POLL_INTERVAL_SECONDS)
+            await asyncio.wait_for(stop.wait(), timeout=_POLL_INTERVAL_SECONDS)
 
 
 async def _effective_crawl_limit(db: "AsyncSession") -> int:
@@ -124,12 +122,10 @@ async def _crawl_tick() -> None:
         await run_pending_crawls(db, max_concurrent=await _effective_crawl_limit(db))
 
 
-async def _crawl_loop() -> None:
-    # Mismo motivo que en _scheduler_loop: un Event nuevo al arrancar evita
-    # heredar tanto un flag ya levantado como un event loop ajeno.
-    global _stop_loops
-    _stop_loops = asyncio.Event()
-    while not _stop_loops.is_set():
+async def _crawl_loop(stop: asyncio.Event | None = None) -> None:
+    """Mismo contrato que _scheduler_loop; ver allí por qué el Event no es global."""
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
         try:
             # Awaited hasta el final antes del siguiente ciclo: run_pending_crawls
             # comparte la misma precondición single-flight que run_pending.
@@ -137,7 +133,7 @@ async def _crawl_loop() -> None:
         except Exception:  # noqa: BLE001 - un tick malo no puede matar el loop
             logger.exception("crawl tick failed; retrying after the poll interval")
         with suppress(TimeoutError):
-            await asyncio.wait_for(_stop_loops.wait(), timeout=_CRAWL_POLL_INTERVAL_SECONDS)
+            await asyncio.wait_for(stop.wait(), timeout=_CRAWL_POLL_INTERVAL_SECONDS)
 
 
 @asynccontextmanager
@@ -151,10 +147,13 @@ async def lifespan(app: FastAPI):
         # API unbootable for that window instead of just skipping the resume.
         logger.exception("startup resume of stale running items failed; continuing without it")
 
+    # Uno solo, compartido por ambos loops, para que apagar los despierte a los
+    # dos a la vez en lugar de que el segundo espere a que venza su intervalo.
+    stop = asyncio.Event()
     tasks = []
     if _settings.scheduler_enabled:
-        tasks.append(asyncio.create_task(_scheduler_loop()))
-        tasks.append(asyncio.create_task(_crawl_loop()))
+        tasks.append(asyncio.create_task(_scheduler_loop(stop)))
+        tasks.append(asyncio.create_task(_crawl_loop(stop)))
     try:
         yield
     finally:
@@ -162,7 +161,7 @@ async def lifespan(app: FastAPI):
         # y una cancelación puede caer dentro del commit y dejar la conexión a
         # medias, que es exactamente lo que envenenó la sesión compartida en
         # Fase 1. El flag solo se observa entre ticks.
-        _stop_loops.set()
+        stop.set()
         for task in tasks:
             await task
 
