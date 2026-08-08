@@ -1,7 +1,11 @@
 import asyncio
+import time
 from collections.abc import Callable
 
 import httpx
+
+#: How often the output file is flushed and a resumable offset reported.
+FLUSH_INTERVAL_SECONDS = 2.0
 
 
 async def download_chunk(
@@ -13,7 +17,22 @@ async def download_chunk(
     backoff_base: float = 0.5,
     resume_from: int = 0,
     on_bytes: Callable[[int], None] | None = None,
+    on_flush: Callable[[int], None] | None = None,
+    flush_interval_seconds: float = FLUSH_INTERVAL_SECONDS,
 ) -> None:
+    """Download `start`-`end` of `url` into `dest_path` at its true offset.
+
+    on_bytes fires per received block and is only good enough to drive a
+    progress bar - those bytes sit in a buffered writer that is not closed
+    until the chunk finishes, so they are not on disk yet.
+
+    on_flush is the durable counterpart: the file is flushed first, then the
+    callback receives the absolute number of bytes of this chunk that are
+    safely written (counting `resume_from`). That value, and only that value,
+    is a valid resume point - persisting an on_bytes total instead would let a
+    restart resume past bytes the process never flushed, leaving a hole in the
+    middle of the file that nothing would ever detect.
+    """
     range_start = start + resume_from
     expected_bytes = end - range_start + 1
 
@@ -45,6 +64,7 @@ async def download_chunk(
                         raise RuntimeError(f"Unexpected status {response.status_code}")
 
                     written = 0
+                    last_flush = time.monotonic()
                     with open(dest_path, "r+b") as f:
                         f.seek(range_start)
                         async for data in response.aiter_bytes():
@@ -52,6 +72,16 @@ async def download_chunk(
                             written += len(data)
                             if on_bytes is not None:
                                 on_bytes(len(data))
+
+                            now = time.monotonic()
+                            if on_flush is not None and now - last_flush >= flush_interval_seconds:
+                                f.flush()
+                                last_flush = now
+                                on_flush(resume_from + written)
+
+                        if on_flush is not None:
+                            f.flush()
+                            on_flush(resume_from + written)
 
                     if written != expected_bytes:
                         raise RuntimeError(

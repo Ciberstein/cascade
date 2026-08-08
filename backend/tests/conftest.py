@@ -63,6 +63,7 @@ async def test_server():
         ignore_range: bool = False,
         head_status: int = 200,
         omit_content_length: bool = False,
+        stream_delay_seconds: float = 0.0,
     ):
         server = FlakyTestServer(
             payload,
@@ -71,6 +72,7 @@ async def test_server():
             ignore_range=ignore_range,
             head_status=head_status,
             omit_content_length=omit_content_length,
+            stream_delay_seconds=stream_delay_seconds,
         )
         url = await server.start()
         servers.append(server)

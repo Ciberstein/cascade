@@ -1,24 +1,34 @@
 import asyncio
+import logging
 import os
+from contextlib import suppress
 from typing import Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.engine.downloader import FLUSH_INTERVAL_SECONDS
 from app.engine.item_runner import run_download_item
 from app.engine.progress import ThrottledBroadcaster
 from app.models import Chunk, DownloadItem, Package
 from app.ws.manager import manager
 
+logger = logging.getLogger(__name__)
+
 _broadcaster = ThrottledBroadcaster(broadcast_fn=manager.broadcast)
+
+#: How often flushed chunk offsets are written to the DB while a download runs.
+#: A crash loses at most this much progress; the bytes themselves stay on disk.
+CHECKPOINT_INTERVAL_SECONDS = 3.0
 
 
 async def resume_stale_running_items(db: AsyncSession) -> None:
     """Requeue items left in "running" state by a prior process that crashed/restarted.
 
-    Chunk rows and their downloaded_bytes are left untouched - only the
-    positional chunk boundaries are trusted across a restart, not the exact
-    in-flight byte offsets (see run_pending's docstring for why).
+    Chunk rows and their downloaded_bytes are left untouched on purpose: they
+    are the resume point. Each one records an offset that was flushed to disk
+    before it was committed (see download_chunk's on_flush), so re-fetching
+    from there is safe, and re-fetching from 0 would be pure waste.
     """
     result = await db.execute(select(DownloadItem).where(DownloadItem.status == "running"))
     for item in result.scalars().all():
@@ -29,6 +39,57 @@ async def resume_stale_running_items(db: AsyncSession) -> None:
 def _dest_path(item: DownloadItem) -> str:
     package_dir = item.package.target_dir if item.package else "/downloads"
     return os.path.join(package_dir, item.filename)
+
+
+async def _write_checkpoint(
+    db: AsyncSession,
+    db_lock: asyncio.Lock,
+    checkpoint_by_index: dict[int, int],
+    chunks_ref: list[Chunk],
+    item: DownloadItem,
+) -> None:
+    """Persist the flushed per-chunk offsets so a restart can resume from them.
+
+    Chunk indices are positional and line up with chunks_ref, which is ordered
+    by range_start - the same order split_into_chunks produced the ranges in.
+    """
+    if not chunks_ref:
+        return  # chunks aren't planned yet; nothing to record
+    async with db_lock:
+        for index, chunk in enumerate(chunks_ref):
+            chunk.downloaded_bytes = checkpoint_by_index.get(index, 0)
+        item.downloaded_bytes = sum(checkpoint_by_index.values())
+        await db.commit()
+
+
+async def _checkpoint_loop(
+    db: AsyncSession,
+    db_lock: asyncio.Lock,
+    checkpoint_by_index: dict[int, int],
+    chunks_ref: list[Chunk],
+    item: DownloadItem,
+    stop: asyncio.Event,
+) -> None:
+    """Writes a checkpoint every CHECKPOINT_INTERVAL_SECONDS until `stop` is set.
+
+    Stopping is a flag rather than task.cancel() on purpose. Cancellation would
+    land wherever the task happens to be - including inside db.commit(), which
+    leaves the DBAPI connection half-through a transaction. SQLAlchemy then
+    invalidates it, and every later statement on the shared session fails. The
+    flag is only ever observed between checkpoints, so a commit always runs to
+    completion.
+    """
+    while not stop.is_set():
+        with suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=CHECKPOINT_INTERVAL_SECONDS)
+        if stop.is_set():
+            return
+        try:
+            await _write_checkpoint(db, db_lock, checkpoint_by_index, chunks_ref, item)
+        except Exception:  # noqa: BLE001 - a failed checkpoint must not abort the download
+            # Losing a checkpoint costs re-downloaded bytes on the next
+            # restart; killing the item over it would cost all of them.
+            logger.exception("checkpoint failed for item %s", item.id)
 
 
 async def _run_one_item(
@@ -49,6 +110,7 @@ async def _run_one_item(
     # not just around run_download_item.
     chunks_ref: list[Chunk] = []
     downloaded_so_far = 0
+    checkpoint_by_index: dict[int, int] = {}
 
     try:
         # Everything from here through the success commit must stay inside
@@ -81,7 +143,10 @@ async def _run_one_item(
                     chunk = Chunk(download_item_id=item.id, range_start=start, range_end=end, status="running")
                     db.add(chunk)
                     chunks_ref.append(chunk)
-                await db.flush()
+                # Committed, not just flushed: an uncommitted row vanishes when
+                # the process dies, and then the restart has no chunk rows to
+                # resume from and re-downloads the item from byte 0.
+                await db.commit()
 
         # NOTE on this local (non-ORM) counter, deliberately deviating from a
         # literal "just mutate item.downloaded_bytes in on_progress" reading
@@ -110,14 +175,45 @@ async def _run_one_item(
             downloaded_so_far += n
             _broadcaster.report(item_id=item.id, downloaded_bytes=downloaded_so_far)
 
-        result = await run_download_item(
-            url=resolved_url,
-            dest_path=dest_path,
-            num_chunks=chunks_per_file,
-            existing_progress=existing_progress,
-            on_progress=on_progress,
-            on_chunks_planned=on_chunks_planned,
+        # Durable per-chunk offsets, kept in a plain dict for exactly the same
+        # reason as downloaded_so_far above: on_checkpoint is a sync callback
+        # fired from inside the concurrent chunk downloads, so it can never
+        # take db_lock, and writing to a mapped attribute from there would
+        # dirty the shared session outside the lock. _checkpoint_loop is what
+        # moves these into the ORM, under the lock.
+        checkpoint_by_index.update(existing_progress)
+
+        def on_checkpoint(chunk_index: int, durable_bytes: int) -> None:
+            # max() guards a retry: a failed attempt restarts its byte count
+            # from resume_from, and the bytes in between were already flushed
+            # (and will be rewritten identically), so the offset must not
+            # travel backwards.
+            checkpoint_by_index[chunk_index] = max(
+                checkpoint_by_index.get(chunk_index, 0), durable_bytes
+            )
+
+        stop_checkpointing = asyncio.Event()
+        checkpointer = asyncio.create_task(
+            _checkpoint_loop(db, db_lock, checkpoint_by_index, chunks_ref, item, stop_checkpointing)
         )
+        try:
+            result = await run_download_item(
+                url=resolved_url,
+                dest_path=dest_path,
+                num_chunks=chunks_per_file,
+                existing_progress=existing_progress,
+                on_progress=on_progress,
+                on_chunks_planned=on_chunks_planned,
+                on_checkpoint=on_checkpoint,
+                flush_interval_seconds=FLUSH_INTERVAL_SECONDS,
+            )
+        finally:
+            # Stopped before the finalizing commit below so it can't interleave
+            # a stale checkpoint on top of the completed state. Awaited (not
+            # cancelled) so any commit already in flight finishes cleanly - see
+            # _checkpoint_loop. Safe from deadlock: db_lock is not held here.
+            stop_checkpointing.set()
+            await checkpointer
         # Mutating item/chunk attributes must happen inside the lock, atomically
         # with the commit that follows: mutating them first and committing in a
         # separate locked section (as a naive reading of "only wrap DB calls"
@@ -144,9 +240,16 @@ async def _run_one_item(
             await db.rollback()
             item.status = "error"
             item.error_message = str(exc)
-            item.downloaded_bytes = downloaded_so_far
-            for chunk in chunks_ref:
+            # Keep the durable offsets rather than the optimistic byte counter:
+            # a user who retries this item should pick up from what is actually
+            # on disk instead of re-fetching it. The rollback above discarded
+            # any uncommitted checkpoint, so re-apply it here.
+            for index, chunk in enumerate(chunks_ref):
                 chunk.status = "error"
+                chunk.downloaded_bytes = checkpoint_by_index.get(index, 0)
+            item.downloaded_bytes = (
+                sum(checkpoint_by_index.values()) if chunks_ref else downloaded_so_far
+            )
             await db.commit()
 
     # Guarantee the final progress update (e.g. reaching 100%) isn't silently

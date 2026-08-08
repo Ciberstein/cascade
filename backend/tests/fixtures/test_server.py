@@ -12,6 +12,8 @@ class FlakyTestServer:
         ignore_range: bool = False,
         head_status: int = 200,
         omit_content_length: bool = False,
+        stream_delay_seconds: float = 0.0,
+        stream_parts: int = 8,
     ):
         self.payload = payload
         self.support_range = support_range
@@ -25,7 +27,18 @@ class FlakyTestServer:
         # Lets tests simulate a server that omits Content-Length on HEAD
         # (e.g. chunked transfer encoding) instead of returning a real size.
         self.omit_content_length = omit_content_length
+        # When > 0, the body is sent in `stream_parts` pieces with this delay
+        # between them. Lets a test observe a download *while it is running*
+        # without racing loopback throughput, which otherwise delivers the
+        # whole payload before any periodic work gets a chance to tick.
+        self.stream_delay_seconds = stream_delay_seconds
+        self.stream_parts = stream_parts
         self._attempts = 0
+        # Every Range header served, in order, as (start, end). Lets a test
+        # assert where a download actually started reading from - the only way
+        # to tell a real resume from a re-download that happens to produce the
+        # same file.
+        self.requested_ranges: list[tuple[int, int]] = []
         self.app = web.Application()
         # allow_head=False: aiohttp's add_get auto-registers a HEAD route by
         # default, which would collide with the explicit add_head below.
@@ -75,14 +88,31 @@ class FlakyTestServer:
         if range_header and self.support_range and not self.ignore_range:
             start, end = range_header.replace("bytes=", "").split("-")
             start, end = int(start), int(end)
+            self.requested_ranges.append((start, end))
             body = self.payload[start : end + 1]
-            return web.Response(
-                status=206,
-                body=body,
-                headers={
-                    "Content-Range": f"bytes {start}-{end}/{len(self.payload)}",
-                    "Content-Length": str(len(body)),
-                },
-            )
+            headers = {
+                "Content-Range": f"bytes {start}-{end}/{len(self.payload)}",
+                "Content-Length": str(len(body)),
+            }
+            if self.stream_delay_seconds > 0:
+                return await self._stream(request, body, status=206, headers=headers)
+            return web.Response(status=206, body=body, headers=headers)
 
+        if self.stream_delay_seconds > 0:
+            return await self._stream(
+                request, self.payload, status=200, headers={"Content-Length": str(len(self.payload))}
+            )
         return web.Response(status=200, body=self.payload)
+
+    async def _stream(
+        self, request: web.Request, body: bytes, status: int, headers: dict
+    ) -> web.StreamResponse:
+        response = web.StreamResponse(status=status, headers=headers)
+        await response.prepare(request)
+
+        size = max(1, -(-len(body) // self.stream_parts))  # ceil division
+        for offset in range(0, len(body), size):
+            await response.write(body[offset : offset + size])
+            await asyncio.sleep(self.stream_delay_seconds)
+        await response.write_eof()
+        return response

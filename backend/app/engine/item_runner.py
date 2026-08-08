@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import httpx
 
 from app.engine.chunker import split_into_chunks
-from app.engine.downloader import download_chunk
+from app.engine.downloader import FLUSH_INTERVAL_SECONDS, download_chunk
 
 
 @dataclass
@@ -37,6 +37,8 @@ async def run_download_item(
     existing_progress: dict[int, int] | None = None,
     on_progress: Callable[[int, int], None] | None = None,
     on_chunks_planned: Callable[[list[tuple[int, int]]], Awaitable[None] | None] | None = None,
+    on_checkpoint: Callable[[int, int], None] | None = None,
+    flush_interval_seconds: float = FLUSH_INTERVAL_SECONDS,
 ) -> ItemResult:
     """Download `url` to `dest_path`, optionally resuming from prior progress.
 
@@ -51,6 +53,11 @@ async def run_download_item(
     Callers that persist progress across process restarts (e.g. a future
     scheduler) must keep num_chunks fixed for the lifetime of an item, or
     discard existing_progress when num_chunks changes.
+
+    on_checkpoint(index, durable_bytes) reports, per chunk, how many of its
+    bytes are flushed to disk. Persisting those values is what makes
+    existing_progress non-zero on the next run - i.e. what turns a restart
+    into a resume rather than a fresh download.
     """
     total_size, supports_range = await _probe(url)
     effective_chunks = num_chunks if supports_range else 1
@@ -75,6 +82,10 @@ async def run_download_item(
             if on_progress is not None:
                 on_progress(index, n)
 
+        def _on_flush(durable_bytes: int) -> None:
+            if on_checkpoint is not None:
+                on_checkpoint(index, durable_bytes)
+
         await download_chunk(
             url=url,
             start=s,
@@ -82,6 +93,8 @@ async def run_download_item(
             dest_path=dest_path,
             resume_from=resume_from,
             on_bytes=_on_bytes if on_progress is not None else None,
+            on_flush=_on_flush if on_checkpoint is not None else None,
+            flush_interval_seconds=flush_interval_seconds,
         )
 
     await asyncio.gather(
