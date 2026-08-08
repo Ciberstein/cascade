@@ -34,6 +34,12 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Los tests live salen a internet: quedan fuera de la corrida normal para que
+# la suite no dependa de que un hoster de terceros esté arriba.
+addopts = "-m 'not live'"
+markers = [
+    "live: golpea el sitio real del hoster; correr a mano con -m live",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

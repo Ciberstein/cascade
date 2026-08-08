@@ -3255,6 +3255,8 @@ git commit -m "feat: add the LinkGrabber tray for reviewing discovered files"
 
 - [ ] **Step 1: Write the failing Dashboard test**
 
+**Antes de agregar nada**, esta tarea rompe dos tests que ya existen en `Dashboard.test.tsx` y que ejercitan el flujo viejo (`createPackage` y el botón "Agregar"): `creates a package from the modal and refreshes` y `keeps the modal open and shows why when creation fails`. El primero queda cubierto por el test nuevo de abajo y se reemplaza por él; el segundo hay que reescribirlo contra `crawlApi.createCrawlJob`, conservando lo que verifica (el modal sigue abierto y se ve el motivo). Lo mismo vale para los literales de `DownloadItem` de `Dashboard.test.tsx` y `PackageDetail.test.tsx`, que necesitan los campos `hoster` y `retry_after` nuevos.
+
 Agregar a `frontend/src/pages/Dashboard.test.tsx`, y agregar el import `import * as crawlApi from '../api/crawl'` al principio:
 
 ```tsx
