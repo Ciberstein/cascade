@@ -1,33 +1,13 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
 from app.database import get_db
-from app.models import GlobalSettings, User
+from app.models import User
 from app.schemas import SettingsResponse, UpdateSettingsRequest
+from app.settings_store import get_or_create_settings as _get_or_create_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
-
-
-async def _get_or_create_settings(db: AsyncSession) -> GlobalSettings:
-    result = await db.execute(select(GlobalSettings).where(GlobalSettings.id == 1))
-    row = result.scalar_one_or_none()
-    if row is not None:
-        return row
-
-    row = GlobalSettings(id=1)
-    db.add(row)
-    try:
-        await db.commit()
-    except IntegrityError:
-        await db.rollback()
-        result = await db.execute(select(GlobalSettings).where(GlobalSettings.id == 1))
-        row = result.scalar_one()
-    else:
-        await db.refresh(row)
-    return row
 
 
 @router.get("", response_model=SettingsResponse)

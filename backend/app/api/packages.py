@@ -10,6 +10,7 @@ from app.config import Settings
 from app.database import get_db
 from app.models import DownloadItem, Package, User
 from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageStatusRequest
+from app.settings_store import read_settings
 
 router = APIRouter(prefix="/packages", tags=["packages"])
 _settings = Settings()
@@ -18,6 +19,18 @@ _settings = Settings()
 def _filename_from_url(url: str) -> str:
     name = url.rstrip("/").rsplit("/", 1)[-1]
     return name or "download"
+
+
+async def _target_dir_root(db: AsyncSession) -> str:
+    """Where new packages are stored, preferring the user's saved setting.
+
+    Resolved per request, not at import: otherwise the "Carpeta de descarga"
+    field would persist a value that nothing ever reads. Existing packages
+    keep the target_dir they were created with - moving files already on disk
+    is not something a settings change should do behind the user's back.
+    """
+    row = await read_settings(db)
+    return row.download_root if row is not None else _settings.download_root
 
 
 @router.get("", response_model=list[PackageResponse])
@@ -39,7 +52,7 @@ async def create_package(
     db.add(package)
     await db.flush()  # populates package.id
 
-    package.target_dir = os.path.join(_settings.download_root, package.id)
+    package.target_dir = os.path.join(await _target_dir_root(db), package.id)
 
     for url in payload.urls:
         db.add(

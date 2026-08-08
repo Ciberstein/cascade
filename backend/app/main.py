@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
@@ -10,7 +11,11 @@ from app.api.settings import router as settings_router
 from app.config import Settings
 from app.database import SessionLocal
 from app.engine.scheduler import resume_stale_running_items, run_pending
+from app.settings_store import read_settings
 from app.ws.routes import router as ws_router
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,18 @@ def _identity(url: str) -> str:
     return url
 
 
+async def _effective_limits(db: "AsyncSession") -> tuple[int, int]:
+    """(max_concurrent_downloads, chunks_per_file), preferring the settings row.
+
+    Read per tick rather than cached at import: a change saved from the
+    Settings page has to take effect without restarting the container.
+    """
+    row = await read_settings(db)
+    if row is None:
+        return _settings.max_concurrent_downloads, _settings.chunks_per_file
+    return row.max_concurrent_downloads, row.chunks_per_file
+
+
 async def _scheduler_tick() -> None:
     """One polling pass: pick up queued items and download them to completion.
 
@@ -34,10 +51,11 @@ async def _scheduler_tick() -> None:
     discarded rather than carried into the next one.
     """
     async with SessionLocal() as db:
+        max_concurrent, chunks_per_file = await _effective_limits(db)
         await run_pending(
             db,
-            max_concurrent=_settings.max_concurrent_downloads,
-            chunks_per_file=_settings.chunks_per_file,
+            max_concurrent=max_concurrent,
+            chunks_per_file=chunks_per_file,
             identity=_identity,
         )
 
