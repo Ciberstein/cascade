@@ -1,0 +1,2 @@
+# Holds the real JWT secret and admin password.
+.env
