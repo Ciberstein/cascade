@@ -2056,7 +2056,33 @@ async def _download_root(db: AsyncSession) -> str:
     return row.download_root if row is not None else _settings.download_root
 ```
 
-- [ ] **Step 6: Register the router in `backend/app/main.py`**
+- [ ] **Step 6: Register the router — en tres lugares, no en uno**
+
+Un router nuevo hay que darlo de alta en los tres sitios que enrutan hacia el backend. Saltarse los dos últimos hace que la API funcione en los tests y falle en el navegador con un 404/405, porque nginx sirve la SPA en esa ruta — y ninguna suite lo detecta: los tests del frontend mockean `fetch` y los del backend hablan con la app en proceso, así que nadie ejercita el ruteo real.
+
+En `backend/app/main.py`, agregar el import después de `from app.api.auth import router as auth_router`:
+
+```python
+from app.api.crawl_jobs import router as crawl_jobs_router
+```
+
+y después de `app.include_router(auth_router)`:
+
+```python
+app.include_router(crawl_jobs_router)
+```
+
+En `frontend/nginx.conf`, agregar el prefijo a la regex del proxy:
+
+```nginx
+    location ~ ^/(auth|packages|settings|crawl-jobs|health) {
+```
+
+En `frontend/vite.config.ts`, agregarlo a la lista del proxy de desarrollo:
+
+```typescript
+      ['/auth', '/packages', '/settings', '/crawl-jobs', '/health', '/ws'].map((path) => [
+```
 
 Agregar el import después de `from app.api.auth import router as auth_router`:
 
@@ -3788,6 +3814,16 @@ rm .env
 Si algún paso falla, anotarlo como tarea de seguimiento al final de este plan antes de dar Fase 2 por cerrada — no parchear en silencio sin actualizar plan o spec.
 
 ---
+
+## Resultado de la verificación end-to-end (Task 19)
+
+Corrida contra el stack completo de Docker Compose. Migración `0001 -> 0002` aplicada, un autoindex de nginx servido dentro de la red de compose con `media/a.bin`, `media/b.bin` y `media/sub/c.bin`.
+
+Resultado: **OK**. El crawl descubrió los tres archivos con sus tamaños, incluido el de la subcarpeta (la recursión funciona), la promoción creó el paquete con `hoster=open_directory` en cada item, y los tres bajaron con md5 idéntico al origen.
+
+Un fallo encontrado y corregido, que ninguna suite podía atrapar: **el prefijo `/crawl-jobs` no estaba en el proxy de nginx ni en el de Vite**, así que nginx servía la SPA en esa ruta y la API respondía 405 desde el navegador aunque todos los tests pasaran. Los tests del frontend mockean `fetch` y los del backend hablan con la app en proceso: nadie ejercita el ruteo real. Corregido en `frontend/nginx.conf` y `frontend/vite.config.ts`, y la Task 9 Step 6 ahora dice explícitamente que un router se da de alta en tres lugares.
+
+Otros tres desvíos del plan aparecieron durante la implementación y quedaron corregidos tanto en el código como en este documento: el nombre de archivo de `direct` (la URL entera exponía el host, y la corrección obvia hacía colisionar dos carpetas en `download`), el `git add` de la Task 9 que omitía `conftest.py`, y el `asyncio.Event` global de la Task 12 que se filtraba entre tests y volvía accidental el apagado.
 
 ## Fuera de alcance (confirmado)
 
