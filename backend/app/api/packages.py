@@ -61,6 +61,7 @@ async def create_package(
                 url=url,
                 filename=_filename_from_url(url),
                 status="queued",
+                hoster="direct",
             )
         )
 

@@ -89,3 +89,33 @@ async def session(db_engine):
     factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as s:
         yield s
+
+
+import httpx
+
+
+@pytest_asyncio.fixture
+async def async_client(db_engine):
+    """Cliente HTTP sobre la app, usable desde un test async.
+
+    ASGITransport no corre el lifespan, así que ni el scheduler ni el loop de
+    crawl arrancan durante estos tests.
+    """
+    factory = sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+
+    async def _get_db():
+        async with factory() as s:
+            yield s
+
+    app.dependency_overrides[get_db] = _get_db
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def async_auth_client(async_client):
+    await async_client.post("/auth/login", json={"username": "admin", "password": "hunter2"})
+    return async_client

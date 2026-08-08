@@ -1,6 +1,7 @@
+import datetime as dt
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class LoginRequest(BaseModel):
@@ -40,6 +41,8 @@ class DownloadItemResponse(BaseModel):
     total_size: int | None
     downloaded_bytes: int
     error_message: str | None
+    hoster: str
+    retry_after: dt.datetime | None
 
     model_config = {"from_attributes": True}
 
@@ -72,3 +75,43 @@ class UpdateSettingsRequest(BaseModel):
     max_concurrent_downloads: int = Field(ge=1, le=20)
     chunks_per_file: int = Field(ge=1, le=16)
     max_speed_kbps: int = Field(ge=0)
+
+
+class CreateCrawlJobRequest(BaseModel):
+    links: str = Field(min_length=1)
+
+    @field_validator("links")
+    @classmethod
+    def at_least_one_link(cls, value: str) -> str:
+        # min_length=1 dejaría pasar un textarea con solo espacios y produciría
+        # un job que no descubre nada, sin decirle al usuario por qué.
+        if not [line for line in value.splitlines() if line.strip()]:
+            raise ValueError("hace falta al menos un enlace")
+        return value
+
+
+class CrawlResultResponse(BaseModel):
+    id: str
+    url: str
+    filename: str
+    size: int | None
+    hoster: str
+    status: str
+    error_message: str | None
+
+    model_config = {"from_attributes": True}
+
+
+class CrawlJobResponse(BaseModel):
+    id: str
+    raw_input: str
+    status: str
+    error_message: str | None
+    results: list[CrawlResultResponse]
+
+    model_config = {"from_attributes": True}
+
+
+class PromoteRequest(BaseModel):
+    name: str = Field(min_length=1)
+    result_ids: list[str] = Field(min_length=1)
