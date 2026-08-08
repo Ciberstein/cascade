@@ -19,6 +19,9 @@ dependencies = [
     # are verified compatible - keep this range until passlib is upgraded/replaced.
     "bcrypt>=4.0.1,<5.0",
     "websockets>=12.0",
+    # Parser HTML para los plugins. selectolax sobre bs4: es C puro, no arrastra
+    # soup-sieve/lxml, y el parseo ocurre dentro del loop de crawl.
+    "selectolax>=0.3.21",
 ]
 
 [project.optional-dependencies]
