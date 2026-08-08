@@ -17,9 +17,9 @@ class ItemResult:
     chunk_count: int
 
 
-async def _probe(url: str) -> tuple[int, bool]:
+async def _probe(url: str, headers: dict[str, str] | None = None) -> tuple[int, bool]:
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.head(url)
+        response = await client.head(url, headers=headers or {})
         response.raise_for_status()
 
         content_length = response.headers.get("Content-Length")
@@ -41,6 +41,7 @@ async def run_download_item(
     on_checkpoint: Callable[[int, int], None] | None = None,
     flush_interval_seconds: float = FLUSH_INTERVAL_SECONDS,
     rate_limiter: RateLimiter | None = None,
+    headers: dict[str, str] | None = None,
 ) -> ItemResult:
     """Download `url` to `dest_path`, optionally resuming from prior progress.
 
@@ -61,7 +62,7 @@ async def run_download_item(
     existing_progress non-zero on the next run - i.e. what turns a restart
     into a resume rather than a fresh download.
     """
-    total_size, supports_range = await _probe(url)
+    total_size, supports_range = await _probe(url, headers)
     effective_chunks = num_chunks if supports_range else 1
 
     open_mode = "r+b" if os.path.exists(dest_path) else "wb"
@@ -98,6 +99,7 @@ async def run_download_item(
             on_flush=_on_flush if on_checkpoint is not None else None,
             flush_interval_seconds=flush_interval_seconds,
             rate_limiter=rate_limiter,
+            headers=headers,
         )
 
     await asyncio.gather(

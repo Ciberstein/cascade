@@ -39,6 +39,8 @@ class FlakyTestServer:
         # to tell a real resume from a re-download that happens to produce the
         # same file.
         self.requested_ranges: list[tuple[int, int]] = []
+        #: Headers de cada request servida, para poder afirmar qué mandó el motor.
+        self.seen_headers: list[dict[str, str]] = []
         self.app = web.Application()
         # allow_head=False: aiohttp's add_get auto-registers a HEAD route by
         # default, which would collide with the explicit add_head below.
@@ -60,6 +62,7 @@ class FlakyTestServer:
             await self.runner.cleanup()
 
     async def _handle_head(self, request: web.Request) -> web.StreamResponse:
+        self.seen_headers.append(dict(request.headers))
         if self.head_status != 200:
             return web.Response(status=self.head_status)
 
@@ -80,6 +83,7 @@ class FlakyTestServer:
         return web.Response(status=200, headers=headers)
 
     async def _handle(self, request: web.Request) -> web.Response:
+        self.seen_headers.append(dict(request.headers))
         self._attempts += 1
         if self._attempts <= self.fail_first_n:
             return web.Response(status=503)
