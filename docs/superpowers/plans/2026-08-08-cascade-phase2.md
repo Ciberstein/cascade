@@ -3823,6 +3823,14 @@ Resultado: **OK**. El crawl descubrió los tres archivos con sus tamaños, inclu
 
 Un fallo encontrado y corregido, que ninguna suite podía atrapar: **el prefijo `/crawl-jobs` no estaba en el proxy de nginx ni en el de Vite**, así que nginx servía la SPA en esa ruta y la API respondía 405 desde el navegador aunque todos los tests pasaran. Los tests del frontend mockean `fetch` y los del backend hablan con la app en proceso: nadie ejercita el ruteo real. Corregido en `frontend/nginx.conf` y `frontend/vite.config.ts`, y la Task 9 Step 6 ahora dice explícitamente que un router se da de alta en tres lugares.
 
+## Revisión final y correcciones
+
+Una revisión de toda la rama contra el spec encontró diez defectos, y uno era grave: **escritura arbitraria de archivos**. `open_directory` tomaba el `filename` del *texto* del enlace en HTML ajeno mientras validaba solo el `href`, y `os.path.join` descarta su prefijo entero si el nombre es absoluto. Un sitio que sirviera `<a href="ep01.mkv">/etc/cron.d/pwned</a>` conseguía que el motor creara ese directorio y escribiera ahí bytes también controlados por él. Corregido saneando en el borde del crawler y con una comprobación de contención justo antes de abrir el archivo.
+
+Los otros que se corrigieron antes de dar la fase por cerrada: jobs de crawl que podían quedarse en `running` para siempre y, peor, seguir escribiendo sobre una sesión ya cerrada; `UnsupportedLink` que nunca caía en `direct` como manda el spec; recursión acotada en profundidad pero no en ancho ni en total; `retry_after` serializado sin huso (el navegador lo leía como hora local) y nunca limpiado al terminar; y colisiones de nombre al aplanar un árbol de carpetas, que ponían dos descargas a escribir el mismo archivo a la vez.
+
+Re-verificado end-to-end tras las correcciones: un árbol con dos archivos homónimos en carpetas distintas baja como `a.bin` y `a (2).bin`, cada uno con su checksum correcto.
+
 Otros tres desvíos del plan aparecieron durante la implementación y quedaron corregidos tanto en el código como en este documento: el nombre de archivo de `direct` (la URL entera exponía el host, y la corrección obvia hacía colisionar dos carpetas en `download`), el `git add` de la Task 9 que omitía `conftest.py`, y el `asyncio.Event` global de la Task 12 que se filtraba entre tests y volvía accidental el apagado.
 
 ## Fuera de alcance (confirmado)
