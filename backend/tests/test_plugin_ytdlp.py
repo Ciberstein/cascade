@@ -18,6 +18,13 @@ PROGRESSIVE = {
 PROGRESSIVE_HD = {**PROGRESSIVE, "format_id": "22", "url": "https://cdn.example/hd.mp4", "height": 720}
 VIDEO_ONLY = {**PROGRESSIVE, "format_id": "137", "url": "https://cdn.example/vo.mp4", "acodec": "none", "height": 1080}
 HLS = {**PROGRESSIVE, "format_id": "hls", "url": "https://cdn.example/x.m3u8", "protocol": "m3u8_native", "height": 1080}
+# Como los publica Facebook: un archivo único con video y audio, pero sin
+# declarar códecs. None es "no se sabe", no "no está".
+UNKNOWN_SD = {"format_id": "sd", "url": "https://cdn.example/sd.mp4", "protocol": "https",
+              "vcodec": None, "acodec": None, "height": None}
+UNKNOWN_HD = {**UNKNOWN_SD, "format_id": "hd", "url": "https://cdn.example/hd-unknown.mp4"}
+AUDIO_ONLY = {"format_id": "a1", "url": "https://cdn.example/a.m4a", "protocol": "https",
+              "vcodec": "none", "acodec": "mp4a", "height": None}
 
 
 def hoster(info=None, raises=None):
@@ -129,3 +136,40 @@ async def test_any_other_failure_is_a_plain_plugin_error():
     with pytest.raises(PluginError) as caught:
         await plugin.crawl("https://sitio/v/1")
     assert not isinstance(caught.value, (LinkDead, UnsupportedLink))
+
+
+@pytest.mark.asyncio
+async def test_a_format_with_unknown_codecs_is_usable_when_nothing_else_is():
+    """El fallo real con un reel de Facebook.
+
+    Facebook publica "sd" y "hd" sin declarar códecs, y el resto de sus
+    formatos son pistas sueltas. Tratar None ("no se sabe") como si fuera
+    "none" ("no está") descartaba justo los dos únicos descargables, y el
+    video fallaba con un mensaje que decía que no había formato progresivo.
+    """
+    plugin = hoster({"formats": [AUDIO_ONLY, UNKNOWN_SD, VIDEO_ONLY, UNKNOWN_HD]})
+
+    link = await plugin.resolve("https://sitio/v/1")
+
+    # Entre dos de calidad indistinguible gana el último: yt-dlp los devuelve
+    # de peor a mejor.
+    assert link.url == "https://cdn.example/hd-unknown.mp4"
+
+
+@pytest.mark.asyncio
+async def test_a_declared_progressive_format_wins_over_an_unknown_one():
+    plugin = hoster({"formats": [UNKNOWN_HD, PROGRESSIVE]})
+
+    link = await plugin.resolve("https://sitio/v/1")
+
+    # Si el sitio declaró ambas pistas, esa certeza vale más que adivinar.
+    assert link.url == "https://cdn.example/v.mp4"
+
+
+@pytest.mark.asyncio
+async def test_a_track_explicitly_absent_is_never_picked():
+    plugin = hoster({"formats": [AUDIO_ONLY, VIDEO_ONLY]})
+
+    # "none" sí significa que la pista no está: eso daría un video mudo.
+    with pytest.raises(PluginError, match="DASH/HLS"):
+        await plugin.resolve("https://sitio/v/1")

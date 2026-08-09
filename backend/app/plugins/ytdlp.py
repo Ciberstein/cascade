@@ -164,20 +164,37 @@ def _best_size(info: dict[str, Any]) -> int | None:
 def _pick_progressive(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
     """El mejor formato que sea un solo archivo HTTP con video y audio.
 
-    Se descarta todo lo que no sea http/https (m3u8, dash) y todo lo que venga
-    sin alguna de las dos pistas: el motor descarga un archivo, no ensambla.
+    Ojo con el vocabulario de yt-dlp, que distingue dos cosas que es fácil
+    confundir: la cadena "none" significa que esa pista NO está, mientras que
+    None significa que no se sabe. Facebook, por ejemplo, publica sus formatos
+    progresivos ("sd" y "hd") sin declarar códecs: tratarlos como si les
+    faltara el audio descartaría justo los únicos que sirven.
+
+    Por eso van en dos tandas: primero los que declaran ambas pistas, y solo
+    si no hay ninguno, los de códecs desconocidos. Lo explícitamente ausente
+    ("none") nunca entra.
     """
-    usable = [
-        f
-        for f in formats
-        if f.get("url")
-        and str(f.get("protocol") or "").startswith("http")
-        and f.get("vcodec") not in (None, "none")
-        and f.get("acodec") not in (None, "none")
+    http = [
+        (i, f)
+        for i, f in enumerate(formats)
+        if f.get("url") and str(f.get("protocol") or "").startswith("http")
     ]
-    if not usable:
-        return None
-    return max(usable, key=lambda f: (f.get("height") or 0, f.get("tbr") or 0))
+
+    def usable(f: dict[str, Any], *, known: bool) -> bool:
+        v, a = f.get("vcodec"), f.get("acodec")
+        if v == "none" or a == "none":
+            return False
+        both_known = v is not None and a is not None
+        return both_known if known else not both_known
+
+    for known in (True, False):
+        tier = [(i, f) for i, f in http if usable(f, known=known)]
+        if tier:
+            # El índice desempata: yt-dlp devuelve los formatos de peor a
+            # mejor, así que ante altura y bitrate iguales - el caso de "sd" y
+            # "hd", que no declaran ninguna de las dos - gana el último.
+            return max(tier, key=lambda pair: (pair[1].get("height") or 0, pair[1].get("tbr") or 0, pair[0]))[1]
+    return None
 
 
 PLUGIN = YtDlpHoster()
