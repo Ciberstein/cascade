@@ -90,3 +90,71 @@ async def test_a_package_with_work_left_is_not_judged_yet(session, test_server, 
 
     await session.refresh(package)
     assert package.status == "queued"
+
+
+@pytest.mark.asyncio
+async def test_startup_reconciles_a_package_left_disagreeing_with_its_items(session, tmp_path):
+    """Exactamente lo que se vio probando: un paquete en "queued" cuyo único
+    item ya había fallado, mostrando 0% en el dashboard para siempre.
+
+    El veredicto normal solo corre sobre paquetes con items en el lote del
+    tick, y ese item nunca vuelve a entrar en uno. Sin esta reconciliación no
+    hay nada que lo corrija.
+    """
+    from app.engine.scheduler import reconcile_package_statuses
+
+    package = Package(name="viejo", status="queued", target_dir=str(tmp_path))
+    session.add(package)
+    await session.flush()
+    session.add(
+        DownloadItem(package_id=package.id, url="http://x/a", filename="a.bin",
+                     status="error", hoster="direct", error_message="algo falló")
+    )
+    await session.commit()
+
+    await reconcile_package_statuses(session)
+
+    await session.refresh(package)
+    assert package.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_leaves_a_package_still_working_alone(session, tmp_path):
+    from app.engine.scheduler import reconcile_package_statuses
+
+    package = Package(name="en curso", status="queued", target_dir=str(tmp_path))
+    session.add(package)
+    await session.flush()
+    session.add_all([
+        DownloadItem(package_id=package.id, url="http://x/a", filename="a.bin",
+                     status="completed", hoster="direct"),
+        DownloadItem(package_id=package.id, url="http://x/b", filename="b.bin",
+                     status="queued", hoster="direct"),
+    ])
+    await session.commit()
+
+    await reconcile_package_statuses(session)
+
+    await session.refresh(package)
+    assert package.status == "queued"
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_does_not_override_a_user_decision(session, tmp_path):
+    from app.engine.scheduler import reconcile_package_statuses
+
+    package = Package(name="cancelado", status="canceled", target_dir=str(tmp_path))
+    session.add(package)
+    await session.flush()
+    session.add(
+        DownloadItem(package_id=package.id, url="http://x/a", filename="a.bin",
+                     status="error", hoster="direct")
+    )
+    await session.commit()
+
+    await reconcile_package_statuses(session)
+
+    await session.refresh(package)
+    # Pausar o cancelar es del usuario: reescribirlo a "error" al reiniciar
+    # borraría su decisión.
+    assert package.status == "canceled"

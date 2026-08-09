@@ -353,25 +353,54 @@ async def run_pending(
     await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, resolver) for item in items))
 
     for package_id in package_ids:
-        pkg_result = await db.execute(select(Package).where(Package.id == package_id))
-        package = pkg_result.scalar_one()
-        items_result = await db.execute(select(DownloadItem).where(DownloadItem.package_id == package_id))
-        pkg_items = items_result.scalars().all()
-        if not pkg_items:
-            continue
+        await _apply_verdict(db, package_id)
+    await db.commit()
 
-        # Un paquete solo cambia de estado cuando ya no queda nada por hacer.
-        # "queued" y "running" siguen en curso; "paused" y "canceled" son
-        # decisiones del usuario que no deben disparar un veredicto.
-        if any(i.status in ("queued", "running") for i in pkg_items):
-            continue
 
-        if all(i.status == "completed" for i in pkg_items):
-            package.status = "completed"
-        elif any(i.status == "error" for i in pkg_items):
-            # Antes faltaba esta rama: con todos sus items fallidos el paquete
-            # se quedaba en "queued" para siempre, y el dashboard mostraba 0%
-            # sin ninguna señal de error. Había que abrir el detalle para
-            # enterarse de que no estaba descargando nada.
-            package.status = "error"
+def _verdict(pkg_items: list[DownloadItem]) -> str | None:
+    """Estado que le corresponde al paquete, o None si todavía no toca decidir.
+
+    Un paquete solo se juzga cuando ya no queda nada por hacer: "queued" y
+    "running" siguen en curso, y "paused"/"canceled" son decisiones del usuario
+    que no deben disparar un veredicto.
+    """
+    if not pkg_items:
+        return None
+    if any(i.status in ("queued", "running") for i in pkg_items):
+        return None
+    if all(i.status == "completed" for i in pkg_items):
+        return "completed"
+    if any(i.status == "error" for i in pkg_items):
+        # Con todos sus items fallidos el paquete se quedaba en "queued" para
+        # siempre, y el dashboard - que muestra el estado del paquete - se veía
+        # en 0% sin ninguna señal de error.
+        return "error"
+    return None
+
+
+async def _apply_verdict(db: AsyncSession, package_id: str) -> None:
+    pkg_result = await db.execute(select(Package).where(Package.id == package_id))
+    package = pkg_result.scalar_one_or_none()
+    if package is None:
+        return
+
+    items_result = await db.execute(select(DownloadItem).where(DownloadItem.package_id == package_id))
+    verdict = _verdict(list(items_result.scalars().all()))
+    if verdict is not None:
+        package.status = verdict
+
+
+async def reconcile_package_statuses(db: AsyncSession) -> None:
+    """Recalcula paquetes cuyo estado quedó contradiciendo a sus items.
+
+    El veredicto normal solo corre sobre los paquetes que tuvieron items en el
+    lote de ese tick. Un paquete cuyos items ya terminaron nunca vuelve a
+    entrar en un lote, así que si el proceso murió entre el commit del item y
+    el del paquete - o si la lógica del veredicto cambió, como pasó al agregar
+    el estado "error" - queda desincronizado para siempre y no hay nada que lo
+    corrija. Esto se ejecuta al arrancar y lo deja consistente.
+    """
+    result = await db.execute(select(Package).where(Package.status.in_(("queued", "running"))))
+    for package in result.scalars().all():
+        await _apply_verdict(db, package.id)
     await db.commit()

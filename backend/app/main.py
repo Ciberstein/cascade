@@ -13,7 +13,11 @@ from app.config import Settings
 from app.crawler.runner import requeue_stale_running_jobs, run_pending_crawls
 from app.database import SessionLocal
 from app.engine.rate_limiter import limiter
-from app.engine.scheduler import resume_stale_running_items, run_pending
+from app.engine.scheduler import (
+    reconcile_package_statuses,
+    resume_stale_running_items,
+    run_pending,
+)
 from app.plugins.base import DirectLink, PluginError, UnsupportedLink
 from app.plugins.registry import call_resolve, registry
 from app.settings_store import read_settings
@@ -156,6 +160,7 @@ async def lifespan(app: FastAPI):
         async with SessionLocal() as db:
             await resume_stale_running_items(db)
             await requeue_stale_running_jobs(db)
+            await reconcile_package_statuses(db)
     except Exception:  # noqa: BLE001 - best-effort recovery, not a boot precondition
         # The DB is commonly not accepting connections yet when the app
         # container starts alongside it; failing startup here would make the
