@@ -1,4 +1,5 @@
 import ProgressBar from './ProgressBar'
+import { fileUrl } from '../api/packages'
 import StatusBadge from './StatusBadge'
 import { formatBytes, percentOf } from '../format'
 import type { Package } from '../types'
@@ -39,6 +40,12 @@ export default function PackageRow({
   const percent = percentOf(downloaded, totalSize)
   const finished = FINISHED.has(pkg.status)
 
+  // Lo que el usuario todavía puede llevarse. La pista de audio de una unión
+  // no cuenta: no es un archivo que pidió.
+  const retrievable = pkg.items.filter(
+    (i) => i.status === 'completed' && !i.file_removed && i.merge_role !== 'audio',
+  )
+
   // El primero que vuelve es el que define cuándo el paquete se mueve otra vez.
   // Solo cuenta un item que siga esperando de verdad: sin filtrar por estado y
   // por vencimiento, un item que ya terminó anunciaría una espera para siempre,
@@ -73,6 +80,24 @@ export default function PackageRow({
           <span className="package-row__waiting">
             esperando hasta {new Date(waitingUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </span>
+        )}
+        {/* En la lista y no solo en el detalle: es acá donde el usuario mira
+            cuando una descarga termina, y sin esto el archivo se queda en el
+            servidor hasta que el barrido lo borra sin que nadie lo haya
+            recibido. */}
+        {retrievable.length === 1 && (
+          <a
+            className="package-row__download"
+            href={fileUrl(pkg.id, retrievable[0].id)}
+            download={retrievable[0].filename}
+          >
+            Descargar
+          </a>
+        )}
+        {retrievable.length > 1 && onOpen && (
+          <button className="package-row__download" onClick={() => onOpen(pkg.id)}>
+            Descargar {retrievable.length} archivos
+          </button>
         )}
         {pkg.status === 'running' && <button onClick={() => onPause(pkg.id)}>Pausar</button>}
         {pkg.status === 'paused' && <button onClick={() => onResume(pkg.id)}>Reanudar</button>}

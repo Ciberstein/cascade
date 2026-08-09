@@ -221,3 +221,48 @@ test('a finished package can still be renamed and deleted', () => {
   expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Renombrar' })).toBeInTheDocument()
 })
+
+test('a finished single-file package can be downloaded straight from the list', () => {
+  const listo: Package = {
+    ...pkg,
+    status: 'completed',
+    items: [{ ...pkg.items[0], status: 'completed' }],
+  }
+
+  render(<PackageRow package={listo} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
+
+  // Es acá donde se mira cuando algo termina. Sin esto el archivo se queda en
+  // el servidor hasta que el barrido lo borra sin que nadie lo reciba.
+  const link = screen.getByRole('link', { name: 'Descargar' })
+  expect(link).toHaveAttribute('href', '/packages/pkg-1/items/i1/file')
+  expect(link).toHaveAttribute('download', 'a.zip')
+})
+
+test('a package with several files sends you to the list of them', () => {
+  const onOpen = vi.fn()
+  const varios: Package = {
+    ...pkg,
+    status: 'completed',
+    items: pkg.items.map((i) => ({ ...i, status: 'completed' as const })),
+  }
+
+  render(
+    <PackageRow package={varios} onPause={noop} onResume={noop} onCancel={noop}
+      onDelete={noop} onRename={noop} onOpen={onOpen} />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Descargar 2 archivos' }))
+  expect(onOpen).toHaveBeenCalledWith('pkg-1')
+})
+
+test('a released file is not offered from the list either', () => {
+  const liberado: Package = {
+    ...pkg,
+    status: 'completed',
+    items: [{ ...pkg.items[0], status: 'completed', file_removed: true }],
+  }
+
+  render(<PackageRow package={liberado} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
+
+  expect(screen.queryByRole('link', { name: 'Descargar' })).not.toBeInTheDocument()
+})
