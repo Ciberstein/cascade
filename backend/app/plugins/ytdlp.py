@@ -14,6 +14,7 @@ entregar un video mudo o un .m3u8 inservible, se falla con un motivo claro.
 import asyncio
 import logging
 from typing import Any, Callable
+from urllib.parse import urlsplit, urlunsplit
 
 from app.plugins.base import (
     CrawledFile,
@@ -52,16 +53,7 @@ class YtDlpHoster:
         """
         if self._extract is not None:
             return True  # instancia de test: el guion decide
-
-        try:
-            from yt_dlp.extractor import gen_extractor_classes
-
-            return any(
-                ie.IE_NAME != "generic" and ie.suitable(url) for ie in gen_extractor_classes()
-            )
-        except Exception:  # noqa: BLE001 - can_handle nunca debe tumbar el registro
-            logger.exception("no se pudo consultar los extractores de yt-dlp")
-            return False
+        return has_extractor(canonical_url(url))
 
     async def crawl(self, url: str) -> CrawlResult:
         info = await self._info(url, flat=True)
@@ -108,6 +100,10 @@ class YtDlpHoster:
         return DirectLink(url=fmt["url"], headers=dict(fmt.get("http_headers") or {}))
 
     async def _info(self, url: str, flat: bool) -> dict[str, Any]:
+        # Canonicalizado acá, en un solo punto: crawl y resolve tienen que
+        # coincidir, o el crawl encontraría el video y la descarga fallaría.
+        url = canonical_url(url) if self._extract is None else url
+
         opts = dict(_YDL_OPTS)
         if flat:
             # Listar una playlist sin resolver cada video: la bandeja necesita
@@ -126,6 +122,45 @@ class YtDlpHoster:
             return await asyncio.to_thread(_extract_sync, url, opts)
         except Exception as exc:  # noqa: BLE001 - se traduce al vocabulario del contrato
             raise _translate(exc, url) from exc
+
+
+def has_extractor(url: str) -> bool:
+    """Si algún extractor específico de yt-dlp reconoce esta URL."""
+    try:
+        from yt_dlp.extractor import gen_extractor_classes
+
+        return any(ie.IE_NAME != "generic" and ie.suitable(url) for ie in gen_extractor_classes())
+    except Exception:  # noqa: BLE001 - esto corre dentro de can_handle, que no puede tumbar el registro
+        logger.exception("no se pudo consultar los extractores de yt-dlp")
+        return False
+
+
+def canonical_url(url: str) -> str:
+    """Reemplaza el TLD por .com si eso hace que un extractor reconozca la URL.
+
+    Muchos sitios tienen espejos por país - xnxx.es junto a xnxx.com - que
+    sirven el mismo contenido con la misma estructura de URL, pero yt-dlp
+    registra solo el dominio canónico. Sin esto, pegar el enlace del espejo
+    falla aunque el video sea perfectamente descargable.
+
+    El cambio es deliberadamente conservador: solo se aplica cuando la URL
+    original NO matchea y la reescrita SÍ. Eso lo vuelve auto-limitado - no
+    puede convertir una URL en cualquier otra cosa, porque el resultado tiene
+    que ser algo que yt-dlp ya sepa manejar.
+    """
+    if has_extractor(url):
+        return url
+
+    parsed = urlsplit(url)
+    host = parsed.hostname
+    if not host or host.endswith(".com") or "." not in host:
+        return url
+
+    swapped_host = f"{host.rsplit('.', 1)[0]}.com"
+    netloc = f"{swapped_host}:{parsed.port}" if parsed.port else swapped_host
+    candidate = urlunsplit(parsed._replace(netloc=netloc))
+
+    return candidate if has_extractor(candidate) else url
 
 
 def _extract_sync(url: str, opts: dict) -> dict[str, Any]:

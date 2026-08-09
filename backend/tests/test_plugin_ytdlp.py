@@ -173,3 +173,54 @@ async def test_a_track_explicitly_absent_is_never_picked():
     # "none" sí significa que la pista no está: eso daría un video mudo.
     with pytest.raises(PluginError, match="DASH/HLS"):
         await plugin.resolve("https://sitio/v/1")
+
+
+def test_a_country_mirror_is_rewritten_to_the_canonical_domain():
+    """Los espejos por país sirven lo mismo, pero yt-dlp registra solo el .com.
+
+    Sin esto, pegar el enlace del espejo falla aunque el video sea
+    perfectamente descargable - fue el caso que apareció probando con xnxx.es.
+    """
+    from app.plugins.ytdlp import canonical_url
+
+    assert canonical_url("https://www.xnxx.es/video-abc/x") == "https://www.xnxx.com/video-abc/x"
+    assert PLUGIN.can_handle("https://www.xnxx.es/video-abc/x")
+
+
+def test_a_url_that_already_matches_is_left_untouched():
+    from app.plugins.ytdlp import canonical_url
+
+    url = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+    assert canonical_url(url) == url
+
+
+def test_the_rewrite_preserves_the_path_and_the_query():
+    from app.plugins.ytdlp import canonical_url
+
+    result = canonical_url("https://www.xnxx.es/video-abc/titulo?x=1#frag")
+
+    assert result == "https://www.xnxx.com/video-abc/titulo?x=1#frag"
+
+
+def test_a_domain_nobody_handles_is_not_rewritten():
+    """El reemplazo es auto-limitado: solo se aplica si el resultado matchea.
+
+    Así no puede convertir una URL cualquiera en otra cosa - lo reescrito tiene
+    que ser algo que yt-dlp ya sepa manejar.
+    """
+    from app.plugins.ytdlp import canonical_url
+
+    for url in [
+        "https://sitio-inventado.es/x",
+        "https://ftp.debian.org/debian/doc/",
+        "http://cascade-fs/media/",
+    ]:
+        assert canonical_url(url) == url
+        assert not PLUGIN.can_handle(url)
+
+
+def test_a_host_without_a_dot_is_left_alone():
+    from app.plugins.ytdlp import canonical_url
+
+    # Un servicio interno por nombre de contenedor no tiene TLD que cambiar.
+    assert canonical_url("http://cascade-fs/media/") == "http://cascade-fs/media/"
