@@ -27,7 +27,7 @@ class FakeHoster:
             return await self._crawl_impl(url)
         return CrawlResult()
 
-    async def resolve(self, url):
+    async def resolve(self, url, format_id=None):
         if self._resolve_impl:
             return await self._resolve_impl(url)
         return DirectLink(url=url)

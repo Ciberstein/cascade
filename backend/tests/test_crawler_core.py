@@ -22,7 +22,7 @@ class ScriptedHoster:
             raise outcome
         return outcome
 
-    async def resolve(self, url):
+    async def resolve(self, url, format_id=None):
         raise AssertionError("crawl_link no debe resolver")
 
 
@@ -35,7 +35,7 @@ class NeverHandles:
     async def crawl(self, url):
         return CrawlResult(files=[CrawledFile(url=url, filename="fallback.bin")])
 
-    async def resolve(self, url):
+    async def resolve(self, url, format_id=None):
         raise AssertionError("crawl_link no debe resolver")
 
 

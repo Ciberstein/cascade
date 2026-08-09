@@ -18,7 +18,7 @@ const pkg: Package = {
       downloaded_bytes: 250,
       error_message: null,
       hoster: 'direct',
-      retry_after: null, file_removed: false,
+      retry_after: null, file_removed: false, merge_role: null,
     },
     {
       id: 'i2',
@@ -29,7 +29,7 @@ const pkg: Package = {
       downloaded_bytes: 0,
       error_message: 'timeout',
       hoster: 'direct',
-      retry_after: null, file_removed: false,
+      retry_after: null, file_removed: false, merge_role: null,
     },
   ],
 }
@@ -95,4 +95,20 @@ test('a released file explains itself instead of offering a dead link', () => {
   // enlace que da 410 sería peor que decirlo.
   expect(screen.getByText(/el servidor liberó su copia/)).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: /Descargar/ })).not.toBeInTheDocument()
+})
+
+test('the audio track being merged is not listed as a file', () => {
+  const uniendo = {
+    ...pkg,
+    items: [
+      { ...pkg.items[0], filename: 'video.mp4', merge_role: 'video' },
+      { ...pkg.items[0], id: 'i9', filename: 'video.mp4', merge_role: 'audio' },
+    ],
+  }
+
+  render(<PackageDetail package={uniendo} onBack={() => {}} />)
+
+  // Es un medio para conseguir el archivo, no un archivo que el usuario pidió:
+  // listarlo lo haría ver dos descargas donde pidió una.
+  expect(screen.getAllByText('video.mp4')).toHaveLength(1)
 })

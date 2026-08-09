@@ -6,6 +6,27 @@ from typing import Protocol, runtime_checkable
 
 
 @dataclass(frozen=True)
+class Variant:
+    """Una calidad concreta en la que se puede bajar un video.
+
+    `video_format` y `audio_format` son identificadores del hoster, no URLs:
+    las URLs caducan y se piden recién al descargar. Cuando `audio_format` no
+    es None, esa calidad viene en pistas separadas y hay que unirlas.
+    """
+
+    id: str
+    label: str
+    video_format: str
+    audio_format: str | None = None
+    height: int | None = None
+    size: int | None = None
+
+    @property
+    def needs_merge(self) -> bool:
+        return self.audio_format is not None
+
+
+@dataclass(frozen=True)
 class CrawledFile:
     """Un archivo concreto descubierto detrás de un link."""
 
@@ -14,6 +35,9 @@ class CrawledFile:
     #: None cuando el hoster no informa tamaño hasta el momento de bajar.
     size: int | None = None
     alive: bool = True
+    #: Calidades entre las que el usuario puede elegir. Vacío para lo que no
+    #: es video: un .zip no tiene resoluciones.
+    variants: list["Variant"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -95,4 +119,4 @@ class Hoster(Protocol):
 
     async def crawl(self, url: str) -> CrawlResult: ...
 
-    async def resolve(self, url: str) -> DirectLink: ...
+    async def resolve(self, url: str, format_id: str | None = None) -> DirectLink: ...

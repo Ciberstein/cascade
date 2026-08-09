@@ -104,10 +104,12 @@ async def test_resolve_carries_the_headers_the_cdn_demands():
 
 
 @pytest.mark.asyncio
-async def test_a_video_without_a_progressive_format_fails_with_a_readable_reason():
+async def test_a_video_with_nothing_downloadable_fails_with_a_readable_reason():
+    # Sin format_id se cae al mejor progresivo; si no hay ninguno, no hay nada
+    # que entregar como archivo único.
     plugin = hoster({"formats": [VIDEO_ONLY, HLS]})
 
-    with pytest.raises(PluginError, match="DASH/HLS"):
+    with pytest.raises(PluginError, match="ninguna calidad descargable"):
         await plugin.resolve("https://sitio/v/1")
 
 
@@ -171,7 +173,7 @@ async def test_a_track_explicitly_absent_is_never_picked():
     plugin = hoster({"formats": [AUDIO_ONLY, VIDEO_ONLY]})
 
     # "none" sí significa que la pista no está: eso daría un video mudo.
-    with pytest.raises(PluginError, match="DASH/HLS"):
+    with pytest.raises(PluginError, match="ninguna calidad descargable"):
         await plugin.resolve("https://sitio/v/1")
 
 
@@ -224,3 +226,46 @@ def test_a_host_without_a_dot_is_left_alone():
 
     # Un servicio interno por nombre de contenedor no tiene TLD que cambiar.
     assert canonical_url("http://cascade-fs/media/") == "http://cascade-fs/media/"
+
+
+def test_the_offered_qualities_go_from_best_to_worst():
+    from app.plugins.ytdlp import _variants
+
+    variants = _variants([PROGRESSIVE, PROGRESSIVE_HD, VIDEO_ONLY, {**PROGRESSIVE, "format_id": "a",
+                          "vcodec": "none", "acodec": "mp4a", "height": None}])
+
+    # Quien no elige espera la mejor, así que la primera tiene que serlo.
+    assert [v.height for v in variants][:2] == [1080, 720]
+
+
+def test_a_resolution_without_its_own_audio_is_offered_as_a_merge():
+    from app.plugins.ytdlp import _variants
+
+    audio = {"format_id": "251", "url": "https://cdn/a", "protocol": "https",
+             "vcodec": "none", "acodec": "opus", "abr": 160}
+    variants = _variants([VIDEO_ONLY, audio])
+
+    # Sin esto, 1080p y todo lo de arriba quedaría fuera de alcance.
+    assert variants[0].needs_merge
+    assert variants[0].audio_format == "251"
+
+
+def test_a_progressive_format_wins_over_a_merge_at_the_same_height():
+    from app.plugins.ytdlp import _variants
+
+    same_height_progressive = {**PROGRESSIVE, "format_id": "18", "height": 1080}
+    audio = {"format_id": "251", "url": "https://cdn/a", "protocol": "https",
+             "vcodec": "none", "acodec": "opus", "abr": 160}
+
+    variants = _variants([VIDEO_ONLY, audio, same_height_progressive])
+
+    # Unir cuesta una descarga extra y un paso de ffmpeg: solo se recurre a eso
+    # cuando no hay un archivo único de esa calidad.
+    assert not variants[0].needs_merge
+
+
+def test_a_video_only_format_is_dropped_when_there_is_no_audio_to_pair():
+    from app.plugins.ytdlp import _variants
+
+    # Ofrecerlo daría un video mudo.
+    assert _variants([VIDEO_ONLY]) == []

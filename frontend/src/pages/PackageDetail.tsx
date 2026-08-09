@@ -25,7 +25,12 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
       </div>
 
       <ul className="detail__items">
-        {pkg.items.map((item) => {
+        {pkg.items
+          // La pista de audio de una calidad que se está uniendo no se lista:
+          // es un medio para conseguir el archivo, no un archivo que el
+          // usuario pidió. Su progreso sí cuenta en la barra del paquete.
+          .filter((item) => item.merge_role !== 'audio')
+          .map((item) => {
           // Same rule as PackageRow: the socket value is fresher than the
           // byte count last checkpointed to the DB.
           const downloaded = Math.max(item.downloaded_bytes, progressByItemId[item.id] ?? 0)
@@ -67,7 +72,7 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
               )}
             </li>
           )
-        })}
+          })}
       </ul>
     </div>
   )

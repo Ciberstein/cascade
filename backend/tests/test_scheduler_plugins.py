@@ -28,7 +28,7 @@ async def test_the_resolver_supplies_the_url_that_is_actually_downloaded(session
     _, real_url = await test_server(payload)
     item = await one_item(session, tmp_path, "http://placeholder/hidden")
 
-    async def resolver(url, hoster):
+    async def resolver(url, hoster, format_id=None):
         assert url == "http://placeholder/hidden"
         assert hoster == "fake"
         return DirectLink(url=real_url)
@@ -45,7 +45,7 @@ async def test_a_rate_limited_item_is_rescheduled_not_failed(session, test_serve
     item = await one_item(session, tmp_path, "http://x/a")
     when = dt.datetime.utcnow() + dt.timedelta(minutes=30)
 
-    async def resolver(url, hoster):
+    async def resolver(url, hoster, format_id=None):
         raise RateLimited(retry_at=when)
 
     await run_pending(session, max_concurrent=1, chunks_per_file=2, resolver=resolver)
@@ -65,7 +65,7 @@ async def test_an_item_waiting_is_skipped_until_its_time(session, test_server, t
         session, tmp_path, "http://x/a", retry_after=dt.datetime.utcnow() + dt.timedelta(hours=1)
     )
 
-    async def resolver(url, hoster):
+    async def resolver(url, hoster, format_id=None):
         raise AssertionError("no debería haberse levantado")
 
     await run_pending(
@@ -84,7 +84,7 @@ async def test_an_item_whose_wait_expired_is_picked_up(session, test_server, tmp
         session, tmp_path, "http://x/a", retry_after=dt.datetime.utcnow() - dt.timedelta(minutes=1)
     )
 
-    async def resolver(url, hoster):
+    async def resolver(url, hoster, format_id=None):
         return DirectLink(url=real_url)
 
     await run_pending(session, max_concurrent=1, chunks_per_file=1, resolver=resolver)
@@ -97,7 +97,7 @@ async def test_an_item_whose_wait_expired_is_picked_up(session, test_server, tmp
 async def test_a_dead_link_fails_the_item_with_its_reason(session, test_server, tmp_path):
     item = await one_item(session, tmp_path, "http://x/gone")
 
-    async def resolver(url, hoster):
+    async def resolver(url, hoster, format_id=None):
         raise LinkDead("el archivo fue borrado")
 
     await run_pending(session, max_concurrent=1, chunks_per_file=2, resolver=resolver)
@@ -113,7 +113,7 @@ async def test_resolved_headers_reach_the_request(session, test_server, tmp_path
     server, real_url = await test_server(payload)
     await one_item(session, tmp_path, "http://x/a")
 
-    async def resolver(url, hoster):
+    async def resolver(url, hoster, format_id=None):
         return DirectLink(url=real_url, headers={"Cookie": "s=1"})
 
     await run_pending(session, max_concurrent=1, chunks_per_file=1, resolver=resolver)

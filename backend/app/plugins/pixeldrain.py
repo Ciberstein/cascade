@@ -56,7 +56,7 @@ class PixeldrainHoster:
             ]
         )
 
-    async def resolve(self, url: str) -> DirectLink:
+    async def resolve(self, url: str, format_id: str | None = None) -> DirectLink:
         match = _FILE_URL.match(url)
         if match is None:
             raise PluginError(f"no se puede descargar directamente {url}")

@@ -18,6 +18,8 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectionInitialized = useRef(false)
   const [name, setName] = useState('')
+  // Calidad elegida por resultado; lo que no esté acá usa la mejor.
+  const [quality, setQuality] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -68,7 +70,7 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
     setSubmitting(true)
     setError(null)
     try {
-      await promoteResults(jobId, name.trim() || 'Paquete sin nombre', [...selected])
+      await promoteResults(jobId, name.trim() || 'Paquete sin nombre', [...selected], quality)
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo crear el paquete')
@@ -111,7 +113,23 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
               <label className="grabber__name" htmlFor={`r-${result.id}`} title={result.url}>
                 {result.filename}
               </label>
-              <span className="grabber__size">{formatBytes(result.size)}</span>
+              {result.variants.length > 0 ? (
+                <select
+                  className="grabber__quality"
+                  aria-label={`Calidad de ${result.filename}`}
+                  value={quality[result.id] ?? result.variants[0].id}
+                  onChange={(e) => setQuality((prev) => ({ ...prev, [result.id]: e.target.value }))}
+                >
+                  {result.variants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label}
+                      {v.size ? ` · ${formatBytes(v.size)}` : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="grabber__size">{formatBytes(result.size)}</span>
+              )}
               <span className="grabber__hoster">{result.hoster}</span>
               <StatusBadge status={result.status} />
               {result.error_message && <span className="grabber__why">{result.error_message}</span>}

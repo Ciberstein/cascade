@@ -1,6 +1,7 @@
 """Toma crawl_jobs pendientes y escribe sus resultados."""
 
 import asyncio
+import json
 import logging
 
 from sqlalchemy import select
@@ -82,6 +83,24 @@ async def _run_one_job(db: AsyncSession, db_lock: asyncio.Lock, job: CrawlJob) -
                         hoster=found.hoster,
                         status=found.status,
                         error_message=found.error_message,
+                        # Como JSON y no como tabla: solo se leen enteras para
+                        # pintar el selector, y se descartan al promover.
+                        variants_json=json.dumps(
+                            [
+                                {
+                                    "id": v.id,
+                                    "label": v.label,
+                                    "height": v.height,
+                                    "size": v.size,
+                                    "needs_merge": v.needs_merge,
+                                    "video_format": v.video_format,
+                                    "audio_format": v.audio_format,
+                                }
+                                for v in found.variants
+                            ]
+                        )
+                        if found.variants
+                        else None,
                     )
                 )
             job.status = "done"

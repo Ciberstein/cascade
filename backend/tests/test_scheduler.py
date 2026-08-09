@@ -10,7 +10,7 @@ from app.models import Chunk, DownloadItem, Package
 from app.plugins.base import DirectLink
 
 
-async def _direct_resolver(url: str, hoster: str) -> DirectLink:
+async def _direct_resolver(url: str, hoster: str, format_id: str | None = None) -> DirectLink:
     return DirectLink(url=url)
 
 

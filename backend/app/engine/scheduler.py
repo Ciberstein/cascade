@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.downloader import FLUSH_INTERVAL_SECONDS
 from app.engine.item_runner import run_download_item
+from app.engine.merge import merge_ready_groups, part_suffix
 from app.engine.progress import ThrottledBroadcaster
 from app.paths import ensure_within, safe_filename
 from app.engine.rate_limiter import limiter
@@ -46,7 +47,10 @@ def _dest_path(item: DownloadItem) -> str:
     # justo antes de crear el directorio y abrir el archivo, así que también
     # cubre items que hayan entrado por otro camino. Si algo escapó, el item
     # falla en vez de escribir fuera de su paquete.
-    return ensure_within(package_dir, os.path.join(package_dir, safe_filename(item.filename)))
+    # Las dos partes de una unión viven en la misma carpeta que el resultado:
+    # sin sufijo se pisarían entre sí.
+    name = safe_filename(item.filename) + part_suffix(item.merge_role)
+    return ensure_within(package_dir, os.path.join(package_dir, name))
 
 
 async def _write_checkpoint(
@@ -105,7 +109,7 @@ async def _run_one_item(
     db_lock: asyncio.Lock,
     item: DownloadItem,
     chunks_per_file: int,
-    resolver: Callable[[str, str], Awaitable[DirectLink]],
+    resolver: Callable[[str, str, str | None], Awaitable[DirectLink]],
 ) -> None:
     async with db_lock:
         item.status = "running"
@@ -137,7 +141,7 @@ async def _run_one_item(
         # contained to that item.
         # Resolver acá y no al agregar: las URLs directas caducan, así que la
         # que sirve es la que se pide justo antes de bajar.
-        direct = await resolver(item.url, item.hoster)
+        direct = await resolver(item.url, item.hoster, item.format_id)
         resolved_url = direct.url
         dest_path = _dest_path(item)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
@@ -302,7 +306,7 @@ async def run_pending(
     db: AsyncSession,
     max_concurrent: int,
     chunks_per_file: int,
-    resolver: Callable[[str, str], Awaitable[DirectLink]],
+    resolver: Callable[[str, str, str | None], Awaitable[DirectLink]],
     _on_start_for_test: Callable[[str], None] | None = None,
 ) -> None:
     """Pick up to `max_concurrent` queued items and download them concurrently.
@@ -357,6 +361,10 @@ async def run_pending(
     package_ids = {item.package_id for item in items}
 
     await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, resolver) for item in items))
+
+    # Antes del veredicto: un grupo recién unido deja de tener parte de audio,
+    # y juzgar el paquete antes lo vería incompleto.
+    await merge_ready_groups(db)
 
     for package_id in package_ids:
         await _apply_verdict(db, package_id)

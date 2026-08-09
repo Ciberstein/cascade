@@ -18,6 +18,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from app.plugins.base import (
     CrawledFile,
+    Variant,
     CrawlResult,
     DirectLink,
     LinkDead,
@@ -73,25 +74,36 @@ class YtDlpHoster:
                 ]
             )
 
+        variants = _variants(info.get("formats") or [])
         return CrawlResult(
             files=[
                 CrawledFile(
                     url=info.get("webpage_url") or url,
                     filename=_filename_for(info),
-                    size=_best_size(info),
+                    size=variants[0].size if variants else None,
+                    variants=variants,
                 )
             ]
         )
 
-    async def resolve(self, url: str) -> DirectLink:
+    async def resolve(self, url: str, format_id: str | None = None) -> DirectLink:
         info = await self._info(url, flat=False)
-        fmt = _pick_progressive(info.get("formats") or [])
+        formats = info.get("formats") or []
+
+        if format_id is not None:
+            # La calidad la eligió el usuario: se pide esa y no otra. Se busca
+            # por id porque las URLs caducan y no se pueden guardar.
+            fmt = next((f for f in formats if str(f.get("format_id")) == format_id), None)
+            if fmt is None:
+                raise PluginError(
+                    f"el formato {format_id} ya no está disponible para este video"
+                )
+        else:
+            fmt = _pick_progressive(formats)
 
         if fmt is None:
             raise PluginError(
-                "este video solo se ofrece en pistas separadas o en segmentos "
-                "(DASH/HLS); Cascade descarga un archivo por rangos y no puede "
-                "remuxearlas"
+                "este video no ofrece ninguna calidad descargable como archivo único"
             )
 
         # http_headers importa de verdad: los CDN de video suelen exigir el
@@ -233,3 +245,74 @@ def _pick_progressive(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 PLUGIN = YtDlpHoster()
+
+
+#: Las alturas que se ofrecen. Listar las 33 variantes que publica YouTube
+#: sería una pared de opciones donde casi todas son indistinguibles.
+_OFFERED_HEIGHTS = (2160, 1440, 1080, 720, 480, 360, 240)
+
+
+def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
+    """Las calidades entre las que el usuario puede elegir, de mejor a peor.
+
+    Incluye las que vienen en pistas separadas: se emparejan con el mejor audio
+    suelto y el motor las une al terminar. Sin eso, en YouTube la única opción
+    sería 360p - la única progresiva de las 33 que publica - para un video que
+    existe en 4K.
+
+    Ante dos formatos de la misma altura gana el progresivo: unir cuesta una
+    descarga extra y un paso de ffmpeg, así que solo se recurre a eso cuando no
+    hay un archivo único de esa calidad.
+    """
+    http = [
+        f for f in formats
+        if f.get("url") and str(f.get("protocol") or "").startswith("http")
+    ]
+    best_audio = _best_audio(http)
+
+    candidates: dict[object, Variant] = {}
+    for fmt in http:
+        if fmt.get("vcodec") == "none":
+            continue  # audio suelto: no es una calidad elegible por sí misma
+
+        # "none" es que la pista no está; None es que no se sabe. Tratar el
+        # desconocido como ausente marcaría para unir formatos que ya traen
+        # audio - los "sd"/"hd" de Facebook son justamente así.
+        needs_audio = fmt.get("acodec") == "none"
+        audio_format = str(best_audio["format_id"]) if (needs_audio and best_audio) else None
+        if needs_audio and audio_format is None:
+            continue  # no hay audio con qué completarlo: no se puede entregar
+
+        size = (fmt.get("filesize") or fmt.get("filesize_approx") or 0)
+        if audio_format:
+            size += (best_audio or {}).get("filesize") or (best_audio or {}).get("filesize_approx") or 0
+
+        height = fmt.get("height")
+        variant = Variant(
+            id=str(fmt["format_id"]),
+            label=f"{height}p" if height else str(fmt.get("format_id")),
+            video_format=str(fmt["format_id"]),
+            audio_format=audio_format,
+            height=height,
+            size=size or None,
+        )
+
+        key = height if height is not None else str(fmt.get("format_id"))
+        if height is not None and height not in _OFFERED_HEIGHTS:
+            continue
+        previo = candidates.get(key)
+        if previo is None or (previo.needs_merge and not variant.needs_merge):
+            candidates[key] = variant
+
+    con_altura = [candidates[h] for h in _OFFERED_HEIGHTS if h in candidates]
+    # Los sin altura declarada (Facebook publica "sd"/"hd" así) van después, en
+    # el orden inverso al de yt-dlp, que los da de peor a mejor.
+    sin_altura = [v for k, v in candidates.items() if not isinstance(k, int)]
+    return con_altura + list(reversed(sin_altura))
+
+
+def _best_audio(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
+    audio = [f for f in formats if f.get("acodec") not in (None, "none") and f.get("vcodec") == "none"]
+    if not audio:
+        return None
+    return max(audio, key=lambda f: f.get("abr") or f.get("tbr") or 0)

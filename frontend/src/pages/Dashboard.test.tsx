@@ -61,7 +61,7 @@ test('pasting links creates a crawl job and opens the tray', async () => {
   })
   vi.spyOn(crawlApi, 'getCrawlJob').mockResolvedValue({
     id: 'j1', raw_input: 'http://x/a.zip', status: 'done', error_message: null,
-    results: [{ id: 'r1', url: 'http://x/a.zip', filename: 'a.zip', size: 10, hoster: 'direct', status: 'ok', error_message: null }],
+    results: [{ id: 'r1', url: 'http://x/a.zip', filename: 'a.zip', size: 10, hoster: 'direct', status: 'ok', error_message: null, variants: [] }],
   })
   stubSocket()
 
@@ -116,7 +116,7 @@ test('clicking a package name shows its detail view', async () => {
           downloaded_bytes: 10,
           error_message: null,
           hoster: 'direct',
-          retry_after: null, file_removed: false,
+          retry_after: null, file_removed: false, merge_role: null,
         },
       ],
     },

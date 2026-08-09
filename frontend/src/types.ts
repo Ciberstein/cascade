@@ -19,6 +19,8 @@ export interface DownloadItem {
   retry_after: string | null
   /** El archivo ya se liberó del servidor; la fila queda en el historial. */
   file_removed: boolean
+  /** 'video'/'audio' mientras se baja una calidad que vino en pistas separadas. */
+  merge_role: string | null
 }
 
 export interface Package {
@@ -40,6 +42,14 @@ export interface AppSettings {
 export type CrawlJobStatus = 'pending' | 'running' | 'done' | 'error'
 export type CrawlResultStatus = 'ok' | 'dead' | 'error'
 
+export interface Variant {
+  id: string
+  label: string
+  height: number | null
+  size: number | null
+  needs_merge: boolean
+}
+
 export interface CrawlResult {
   id: string
   url: string
@@ -48,6 +58,8 @@ export interface CrawlResult {
   hoster: string
   status: CrawlResultStatus
   error_message: string | null
+  /** Calidades entre las que elegir. Vacío para lo que no es video. */
+  variants: Variant[]
 }
 
 export interface CrawlJob {

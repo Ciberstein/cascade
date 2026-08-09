@@ -2,7 +2,7 @@
 
 import logging
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from urllib.parse import urlparse
 
@@ -33,6 +33,7 @@ class DiscoveredFile:
     hoster: str
     status: str  # "ok" | "dead" | "error"
     error_message: str | None
+    variants: list = field(default_factory=list)
 
 
 async def crawl_link(
@@ -96,6 +97,7 @@ async def crawl_link(
                     hoster=plugin_name,
                     status="ok" if discovered.alive else "dead",
                     error_message=None,
+                    variants=list(discovered.variants),
                 )
             )
 

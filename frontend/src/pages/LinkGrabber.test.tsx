@@ -15,8 +15,8 @@ const doneJob: CrawlJob = {
   status: 'done',
   error_message: null,
   results: [
-    { id: 'r1', url: 'http://x/a.zip', filename: 'a.zip', size: 1024, hoster: 'direct', status: 'ok', error_message: null },
-    { id: 'r2', url: 'http://x/b.zip', filename: 'b.zip', size: null, hoster: 'direct', status: 'dead', error_message: 'no existe' },
+    { id: 'r1', url: 'http://x/a.zip', filename: 'a.zip', size: 1024, hoster: 'direct', status: 'ok', error_message: null, variants: [] },
+    { id: 'r2', url: 'http://x/b.zip', filename: 'b.zip', size: null, hoster: 'direct', status: 'dead', error_message: 'no existe', variants: [] },
   ],
 }
 
@@ -56,7 +56,7 @@ test('promotes only the checked results', async () => {
   fireEvent.change(screen.getByLabelText('Nombre del paquete'), { target: { value: 'Mi paquete' } })
   fireEvent.click(screen.getByRole('button', { name: 'Agregar a la cola' }))
 
-  await waitFor(() => expect(promote).toHaveBeenCalledWith('j1', 'Mi paquete', ['r1']))
+  await waitFor(() => expect(promote).toHaveBeenCalledWith('j1', 'Mi paquete', ['r1'], {}))
   await waitFor(() => expect(onDone).toHaveBeenCalled())
 })
 
@@ -100,4 +100,47 @@ test('submit is disabled when nothing is selected', async () => {
   await screen.findByText('b.zip')
 
   expect(screen.getByRole('button', { name: 'Agregar a la cola' })).toBeDisabled()
+})
+
+test('a video offers its qualities and sends the chosen one', async () => {
+  const conCalidades: CrawlJob = {
+    ...doneJob,
+    results: [
+      {
+        id: 'r1', url: 'https://sitio/v', filename: 'video.mp4', size: null,
+        hoster: 'ytdlp', status: 'ok', error_message: null,
+        variants: [
+          { id: '299', label: '1080p', height: 1080, size: 288000000, needs_merge: true },
+          { id: '18', label: '360p', height: 360, size: 29000000, needs_merge: false },
+        ],
+      },
+    ],
+  }
+  vi.spyOn(crawlApi, 'getCrawlJob').mockResolvedValue(conCalidades)
+  const promote = vi.spyOn(crawlApi, 'promoteResults').mockResolvedValue({
+    id: 'p1', name: 'x', status: 'queued', target_dir: '/x', items: [],
+  })
+
+  render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)
+  const selector = await screen.findByLabelText('Calidad de video.mp4')
+
+  // La mejor viene preseleccionada: quien no elige espera la mejor.
+  expect(selector).toHaveValue('299')
+
+  fireEvent.change(selector, { target: { value: '18' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Agregar a la cola' }))
+
+  await waitFor(() =>
+    expect(promote).toHaveBeenCalledWith('j1', 'Paquete sin nombre', ['r1'], { r1: '18' }),
+  )
+})
+
+test('something that is not a video shows its size instead of a picker', async () => {
+  vi.spyOn(crawlApi, 'getCrawlJob').mockResolvedValue(doneJob)
+
+  render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)
+  await screen.findByText('a.zip')
+
+  expect(screen.queryByLabelText(/Calidad de/)).not.toBeInTheDocument()
+  expect(screen.getByText('1.0 KB')).toBeInTheDocument()
 })

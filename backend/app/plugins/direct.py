@@ -31,7 +31,7 @@ class DirectHoster:
     async def crawl(self, url: str) -> CrawlResult:
         return CrawlResult(files=[CrawledFile(url=url, filename=filename_from_url(url))])
 
-    async def resolve(self, url: str) -> DirectLink:
+    async def resolve(self, url: str, format_id: str | None = None) -> DirectLink:
         return DirectLink(url=url)
 
 

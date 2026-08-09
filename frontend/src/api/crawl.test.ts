@@ -40,7 +40,7 @@ test('promoteResults sends the package name and the chosen ids', async () => {
     '/crawl-jobs/j1/promote',
     expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ name: 'Mi paquete', result_ids: ['r1', 'r2'] }),
+      body: JSON.stringify({ name: 'Mi paquete', result_ids: ['r1', 'r2'], quality: {} }),
     }),
   )
 })

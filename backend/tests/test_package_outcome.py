@@ -14,11 +14,11 @@ from app.plugins.base import DirectLink, PluginError
 from tests.conftest import TEST_OWNER
 
 
-async def _boom_resolver(url: str, hoster: str) -> DirectLink:
+async def _boom_resolver(url: str, hoster: str, format_id: str | None = None) -> DirectLink:
     raise PluginError("el sitio no devolvió un archivo")
 
 
-async def _direct_resolver(url: str, hoster: str) -> DirectLink:
+async def _direct_resolver(url: str, hoster: str, format_id: str | None = None) -> DirectLink:
     return DirectLink(url=url)
 
 
@@ -52,7 +52,7 @@ async def test_a_partially_failed_package_still_ends_in_error(session, test_serv
     _, good = await test_server(b"Z" * 100)
     package = await _package_with(session, tmp_path, [good, "http://x/bad"])
 
-    async def mixed(url, hoster):
+    async def mixed(url, hoster, format_id=None):
         if url == good:
             return DirectLink(url=url)
         raise PluginError("no se pudo resolver")

@@ -80,8 +80,13 @@ async def call_crawl(plugin: Hoster, url: str, timeout: float = PLUGIN_TIMEOUT_S
     return await _guard(plugin.crawl(url), plugin=plugin, url=url, timeout=timeout)
 
 
-async def call_resolve(plugin: Hoster, url: str, timeout: float = PLUGIN_TIMEOUT_SECONDS) -> DirectLink:
-    return await _guard(plugin.resolve(url), plugin=plugin, url=url, timeout=timeout)
+async def call_resolve(
+    plugin: Hoster,
+    url: str,
+    format_id: str | None = None,
+    timeout: float = PLUGIN_TIMEOUT_SECONDS,
+) -> DirectLink:
+    return await _guard(plugin.resolve(url, format_id), plugin=plugin, url=url, timeout=timeout)
 
 
 async def _guard(coro, *, plugin: Hoster, url: str, timeout: float):

@@ -46,6 +46,11 @@ class DownloadItemResponse(BaseModel):
     #: True cuando el archivo ya se liberó del servidor. La fila queda en el
     #: historial; lo que se fue es el archivo.
     file_removed: bool
+    #: "video"/"audio" mientras una calidad que vino en pistas separadas se
+    #: está bajando; None el resto del tiempo. La parte de audio no se lista:
+    #: es un medio, no una descarga que el usuario pidió. Su progreso sí cuenta
+    #: en el total del paquete, o la barra mentiría.
+    merge_role: str | None
 
     model_config = {"from_attributes": True}
 
@@ -118,6 +123,14 @@ class CreateCrawlJobRequest(BaseModel):
         return value
 
 
+class VariantResponse(BaseModel):
+    id: str
+    label: str
+    height: int | None = None
+    size: int | None = None
+    needs_merge: bool = False
+
+
 class CrawlResultResponse(BaseModel):
     id: str
     url: str
@@ -126,6 +139,8 @@ class CrawlResultResponse(BaseModel):
     hoster: str
     status: str
     error_message: str | None
+    #: Calidades entre las que elegir. Vacío para lo que no es video.
+    variants: list[VariantResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -143,6 +158,9 @@ class CrawlJobResponse(BaseModel):
 class PromoteRequest(BaseModel):
     name: str = Field(min_length=1)
     result_ids: list[str] = Field(min_length=1)
+    #: Calidad elegida por resultado: {id_de_resultado: id_de_variante}. Lo que
+    #: no aparezca usa la mejor disponible.
+    quality: dict[str, str] = Field(default_factory=dict)
 
 
 class CredentialsRequest(BaseModel):

@@ -45,7 +45,7 @@ _CRAWL_POLL_INTERVAL_SECONDS = 1.0
 _SWEEP_INTERVAL_SECONDS = 300.0
 
 
-async def _resolve(url: str, hoster: str) -> DirectLink:
+async def _resolve(url: str, hoster: str, format_id: str | None = None) -> DirectLink:
     """Devuelve la URL directa usando el plugin con el que se encoló el item.
 
     Si ese plugin ya no existe (renombrado o eliminado entre que se encoló y
@@ -63,7 +63,7 @@ async def _resolve(url: str, hoster: str) -> DirectLink:
     last: UnsupportedLink | None = None
     for plugin in candidates:
         try:
-            return await call_resolve(plugin, url)
+            return await call_resolve(plugin, url, format_id)
         except UnsupportedLink as exc:
             last = exc
             continue

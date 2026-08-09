@@ -52,6 +52,15 @@ class DownloadItem(Base):
     #: Cuándo el barrido borró el archivo del disco del servidor. La fila queda
     #: en el historial; lo que se va es el archivo.
     file_removed_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+    #: Identificador de formato del hoster (la calidad elegida). None para lo
+    #: que no es video.
+    format_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    #: Las calidades altas vienen en pistas separadas. Las dos partes comparten
+    #: este grupo y se unen cuando ambas terminan.
+    merge_group: Mapped[str | None] = mapped_column(String(36), index=True, default=None)
+    #: "video" o "audio" dentro del grupo. La parte de audio no se le muestra
+    #: al usuario: es un medio, no una descarga que él pidió.
+    merge_role: Mapped[str | None] = mapped_column(String(10), default=None)
 
     package: Mapped["Package"] = relationship(back_populates="items")
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="item", cascade="all, delete-orphan")
@@ -128,8 +137,18 @@ class CrawlResult(Base):
     hoster: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(20), default="ok")
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
+    #: Calidades ofrecidas, serializadas. Van como JSON y no como tabla porque
+    #: solo se leen enteras para pintar el selector y se descartan al promover.
+    variants_json: Mapped[str | None] = mapped_column(Text, default=None)
 
     job: Mapped["CrawlJob"] = relationship(back_populates="results")
+
+    @property
+    def variants(self) -> list[dict]:
+        """Las calidades ofrecidas, deserializadas para la respuesta."""
+        import json
+
+        return json.loads(self.variants_json) if self.variants_json else []
 
 
 class User(Base):

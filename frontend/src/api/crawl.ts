@@ -10,9 +10,15 @@ export function getCrawlJob(id: string): Promise<CrawlJob> {
 }
 
 /** Convierte los resultados elegidos en un paquete descargable. */
-export function promoteResults(jobId: string, name: string, resultIds: string[]): Promise<Package> {
+export function promoteResults(
+  jobId: string,
+  name: string,
+  resultIds: string[],
+  /** Calidad elegida por resultado. Lo que falte usa la mejor disponible. */
+  quality: Record<string, string> = {},
+): Promise<Package> {
   return apiFetch(`/crawl-jobs/${jobId}/promote`, {
     method: 'POST',
-    body: JSON.stringify({ name, result_ids: resultIds }),
+    body: JSON.stringify({ name, result_ids: resultIds, quality }),
   })
 }

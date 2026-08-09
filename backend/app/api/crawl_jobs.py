@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -108,6 +109,30 @@ async def promote(
 
     taken: set[str] = set()
     for found in chosen:
+        variant = _chosen_variant(found, payload.quality.get(found.id))
+        filename = unique_name(found.filename, taken)
+
+        if variant and variant.get("needs_merge"):
+            # Esta calidad viene en pistas separadas: se encolan las dos y el
+            # motor las une al terminar. El audio no se le muestra al usuario -
+            # es un medio, no una descarga que él pidió.
+            group = uuid.uuid4().hex
+            db.add(
+                DownloadItem(
+                    package_id=package.id, url=found.url, filename=filename,
+                    total_size=None, hoster=found.hoster, status="queued",
+                    format_id=variant["video_format"], merge_group=group, merge_role="video",
+                )
+            )
+            db.add(
+                DownloadItem(
+                    package_id=package.id, url=found.url, filename=filename,
+                    total_size=None, hoster=found.hoster, status="queued",
+                    format_id=variant["audio_format"], merge_group=group, merge_role="audio",
+                )
+            )
+            continue
+
         db.add(
             DownloadItem(
                 package_id=package.id,
@@ -119,10 +144,11 @@ async def promote(
                 # escritores abriendo el mismo archivo en "r+b" y buscando sus
                 # propios rangos. El resultado es un archivo con las dos
                 # descargas entremezcladas y ambos items en "completed".
-                filename=unique_name(found.filename, taken),
-                total_size=found.size,
+                filename=filename,
+                total_size=variant.get("size") if variant else found.size,
                 hoster=found.hoster,
                 status="queued",
+                format_id=variant["video_format"] if variant else None,
             )
         )
 
@@ -133,6 +159,21 @@ async def promote(
     )
     return created.scalar_one()
 
+
+
+def _chosen_variant(found, variant_id: str | None) -> dict | None:
+    """La calidad elegida, o la mejor disponible si el cliente no eligió.
+
+    Las variantes vienen ordenadas de mejor a peor, así que la primera es el
+    default sensato: quien no elige espera la mejor. Un id que ya no existe
+    cae en ese mismo default en vez de fallar la promoción entera.
+    """
+    variants = found.variants
+    if not variants:
+        return None
+    if variant_id is None:
+        return variants[0]
+    return next((v for v in variants if v["id"] == variant_id), variants[0])
 
 
 def _download_root() -> str:
