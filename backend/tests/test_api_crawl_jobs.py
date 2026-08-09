@@ -82,9 +82,11 @@ async def test_the_promoted_package_lands_under_the_download_root(async_auth_cli
         f"/crawl-jobs/{job_id}/promote", json={"name": "p", "result_ids": ["r1"]}
     )).json()
 
-    # Derivado del id generado, no del nombre que escribió el usuario: un nombre
-    # con "../" escaparía del volumen de descargas.
-    assert body["target_dir"].endswith(body["id"])
+    # La carpeta lleva el nombre del paquete, saneado: un nombre con "../"
+    # escaparía del volumen de descargas.
+    import os
+    assert os.path.basename(body["target_dir"]) == "p"
+    assert ".." not in body["target_dir"]
 
 
 @pytest.mark.asyncio

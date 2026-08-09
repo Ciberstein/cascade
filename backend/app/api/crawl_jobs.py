@@ -10,6 +10,8 @@ from app.config import Settings
 from app.database import get_db
 from app.models import CrawlJob, CrawlResult, DownloadItem, Package, User
 from app.schemas import CrawlJobResponse, CreateCrawlJobRequest, PackageResponse, PromoteRequest
+from app.package_dirs import target_dir_for
+from app.paths import unique_name
 from app.settings_store import read_settings
 
 router = APIRouter(prefix="/crawl-jobs", tags=["crawl"])
@@ -90,7 +92,7 @@ async def promote(
     package = Package(name=payload.name, status="queued", target_dir="")
     db.add(package)
     await db.flush()  # populates package.id
-    package.target_dir = os.path.join(root, package.id)
+    package.target_dir = await target_dir_for(db, root, payload.name)
 
     taken: set[str] = set()
     for found in chosen:
@@ -105,7 +107,7 @@ async def promote(
                 # escritores abriendo el mismo archivo en "r+b" y buscando sus
                 # propios rangos. El resultado es un archivo con las dos
                 # descargas entremezcladas y ambos items en "completed".
-                filename=_unique_filename(found.filename, taken),
+                filename=unique_name(found.filename, taken),
                 total_size=found.size,
                 hoster=found.hoster,
                 status="queued",
@@ -119,20 +121,6 @@ async def promote(
     )
     return created.scalar_one()
 
-
-def _unique_filename(name: str, taken: set[str]) -> str:
-    """Agrega un sufijo numérico si el nombre ya se usó en este paquete."""
-    if name not in taken:
-        taken.add(name)
-        return name
-
-    stem, dot, ext = name.partition(".")
-    for n in range(2, 1000):
-        candidate = f"{stem} ({n}){dot}{ext}"
-        if candidate not in taken:
-            taken.add(candidate)
-            return candidate
-    raise HTTPException(status_code=409, detail=f"demasiados archivos llamados {name}")
 
 
 async def _download_root(db: AsyncSession) -> str:

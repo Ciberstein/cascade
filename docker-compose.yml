@@ -24,7 +24,10 @@ services:
       # the download folder saved from the UI wins.
       DOWNLOAD_ROOT: /downloads
     volumes:
-      - downloads:/downloads
+      # Carpeta real del host, no un volumen con nombre: lo descargado tiene
+      # que aparecer donde el usuario pueda abrirlo. Un volumen vive dentro de
+      # la VM de Docker y solo se saca con `docker cp`.
+      - "${DOWNLOAD_DIR:-./downloads}:/downloads"
     restart: unless-stopped
     depends_on:
       postgres:
@@ -40,4 +43,3 @@ services:
 
 volumes:
   pg_data:
-  downloads:

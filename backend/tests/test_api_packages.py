@@ -48,10 +48,12 @@ async def test_create_package_target_dir_is_safe_even_with_malicious_name(auth_c
     target_dir = body["target_dir"]
     download_root = Settings().download_root
 
-    # must stay confined under download_root, keyed by the generated id --
-    # never derived from (and never escaping via) the user-supplied name.
+    # La carpeta ahora lleva el nombre del paquete en vez del id generado, que
+    # era ilegible. La propiedad que importa no cambió: el nombre lo escribe el
+    # usuario, así que se sanea y no puede salir de download_root.
     assert ".." not in target_dir
-    assert target_dir == os.path.join(download_root, body["id"])
+    assert os.path.dirname(target_dir) == download_root
+    assert os.path.basename(target_dir) not in ("", ".", "..")
 
 
 @pytest.mark.asyncio

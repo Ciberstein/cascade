@@ -10,6 +10,7 @@ from app.config import Settings
 from app.database import get_db
 from app.models import DownloadItem, Package, User
 from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageStatusRequest
+from app.package_dirs import target_dir_for
 from app.settings_store import read_settings
 
 router = APIRouter(prefix="/packages", tags=["packages"])
@@ -52,7 +53,7 @@ async def create_package(
     db.add(package)
     await db.flush()  # populates package.id
 
-    package.target_dir = os.path.join(await _target_dir_root(db), package.id)
+    package.target_dir = await target_dir_for(db, await _target_dir_root(db), payload.name)
 
     for url in payload.urls:
         db.add(

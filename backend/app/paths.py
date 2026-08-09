@@ -60,6 +60,28 @@ def _truncate_keeping_extension(name: str) -> str:
     return f"{stem[:keep]}.{ext}"
 
 
+def unique_name(name: str, taken: set[str]) -> str:
+    """Agrega " (2)", " (3)"... si el nombre ya está usado, como un navegador.
+
+    Respeta la extensión, que es lo que hace que el sufijo quede en
+    "video (2).mp4" y no en "video.mp4 (2)".
+    """
+    if name not in taken:
+        taken.add(name)
+        return name
+
+    stem, dot, ext = name.rpartition(".")
+    if not dot or len(ext) > _MAX_EXTENSION:
+        stem, dot, ext = name, "", ""
+
+    for n in range(2, 1000):
+        candidate = f"{stem} ({n}){dot}{ext}"
+        if candidate not in taken:
+            taken.add(candidate)
+            return candidate
+    raise ValueError(f"demasiados nombres repetidos como {name!r}")
+
+
 def ensure_within(base_dir: str, path: str) -> str:
     """Devuelve `path` si cae dentro de `base_dir`; si no, lanza ValueError.
 
