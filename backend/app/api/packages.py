@@ -1,3 +1,5 @@
+import datetime as dt
+import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +16,8 @@ from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageRequ
 from app.package_dirs import target_dir_for
 from app.paths import ensure_within, safe_filename
 from app.settings_store import read_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/packages", tags=["packages"])
 _settings = Settings()
@@ -141,9 +145,19 @@ async def download_item_file(
         raise HTTPException(status_code=409, detail="La descarga todavía no terminó")
 
     path = _item_path(item)
-    if not os.path.isfile(path):
-        # Alguien lo borró de la carpeta del servidor por fuera de Cascade.
-        raise HTTPException(status_code=410, detail="El archivo ya no está en el servidor")
+    if item.file_removed_at is not None or not os.path.isfile(path):
+        # El servidor es un lugar de paso: una vez retirado, el archivo se
+        # libera. La fila queda en el historial, el archivo no.
+        raise HTTPException(
+            status_code=410,
+            detail="El archivo ya no está en el servidor. Volvé a agregar el enlace para bajarlo otra vez.",
+        )
+
+    if item.retrieved_at is None:
+        # Solo la primera vez: el margen de gracia se cuenta desde el primer
+        # retiro, no desde el último, o reintentar lo postergaría sin fin.
+        item.retrieved_at = dt.datetime.utcnow()
+        await db.commit()
 
     return FileResponse(path, filename=item.filename, media_type="application/octet-stream")
 
@@ -165,12 +179,11 @@ async def delete_package(
     db: AsyncSession = Depends(get_db),
     owner: str = Depends(get_owner),
 ):
-    """Saca el paquete de la lista.
+    """Saca el paquete de la lista y libera lo que quede en el servidor.
 
-    Los archivos ya descargados **no** se borran: quedan en la carpeta, igual
-    que cuando un navegador borra una descarga de su historial. Borrar el
-    trabajo terminado de alguien porque quiso limpiar su lista sería una
-    sorpresa cara y sin vuelta atrás.
+    Sí borra los archivos, a diferencia de lo que haría un gestor que guarda:
+    acá el servidor es un lugar de paso y la copia del usuario está en su
+    equipo. Dejarlos sería exactamente la acumulación que se quiere evitar.
     """
     result = await db.execute(
         select(Package)
@@ -188,6 +201,18 @@ async def delete_package(
             status_code=409,
             detail="Hay archivos descargando; pausá o cancelá el paquete antes de eliminarlo",
         )
+
+    for item in package.items:
+        if item.file_removed_at is not None:
+            continue
+        try:
+            os.remove(os.path.join(package.target_dir, item.filename))
+        except FileNotFoundError:
+            pass
+        except OSError:
+            # No poder borrar un archivo no puede impedir sacar el paquete de
+            # la lista; el barrido lo va a reintentar.
+            logger.exception("no se pudo liberar %s", item.filename)
 
     await db.delete(package)
     await db.commit()

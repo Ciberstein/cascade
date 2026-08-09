@@ -77,16 +77,21 @@ async def test_deleting_removes_the_package_with_its_items_and_chunks(async_auth
 
 
 @pytest.mark.asyncio
-async def test_deleting_leaves_the_downloaded_files_alone(async_auth_client, session, tmp_path):
+async def test_deleting_frees_the_file_from_the_server(async_auth_client, session, tmp_path):
+    """Cambió respecto de un gestor que guarda.
+
+    Antes eliminar dejaba el archivo, como cuando un navegador borra una
+    descarga de su historial. Pero el servidor pasó a ser un lugar de paso: la
+    copia del usuario está en su equipo, y dejar la del servidor sería
+    exactamente la acumulación que se quiere evitar.
+    """
     package = await _seed(session, tmp_path)
     archivo = tmp_path / "a.bin"
-    archivo.write_bytes(b"contenido ya descargado")
+    archivo.write_bytes(b"copia del servidor")
 
     await async_auth_client.delete(f"/packages/{package.id}")
 
-    # Igual que un navegador al borrar una descarga de su historial: se va de
-    # la lista, el archivo queda. Borrarlo sería una sorpresa sin vuelta atrás.
-    assert archivo.read_bytes() == b"contenido ya descargado"
+    assert not archivo.exists()
 
 
 @pytest.mark.asyncio

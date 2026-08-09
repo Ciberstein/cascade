@@ -100,3 +100,53 @@ async def test_a_tampered_filename_cannot_serve_a_file_outside_the_package(
     response = await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
 
     assert response.content != b"ajeno"
+
+
+@pytest.mark.asyncio
+async def test_the_first_retrieval_starts_the_clock(async_auth_client, session, tmp_path):
+    package, item = await _completed(session, tmp_path)
+
+    await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
+
+    await session.refresh(item)
+    assert item.retrieved_at is not None
+
+
+@pytest.mark.asyncio
+async def test_retrying_does_not_postpone_the_release(async_auth_client, session, tmp_path):
+    package, item = await _completed(session, tmp_path)
+
+    await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
+    await session.refresh(item)
+    primero = item.retrieved_at
+
+    await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
+
+    await session.refresh(item)
+    # Contar desde el último retiro dejaría postergar la liberación sin fin.
+    assert item.retrieved_at == primero
+
+
+@pytest.mark.asyncio
+async def test_a_released_file_says_so_instead_of_failing_obscurely(async_auth_client, session, tmp_path):
+    import datetime as dt
+
+    package, item = await _completed(session, tmp_path)
+    item.file_removed_at = dt.datetime.utcnow()
+    await session.commit()
+
+    response = await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
+
+    assert response.status_code == 410
+    assert "ya no está en el servidor" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_package_frees_its_files(async_auth_client, session, tmp_path):
+    package, _ = await _completed(session, tmp_path)
+
+    await async_auth_client.delete(f"/packages/{package.id}")
+
+    # Acá sí se borran, al revés que en un gestor que guarda: el servidor es un
+    # lugar de paso y la copia del usuario está en su equipo.
+    assert not (tmp_path / "video.mp4").exists()

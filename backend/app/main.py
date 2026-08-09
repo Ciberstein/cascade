@@ -19,6 +19,7 @@ from app.engine.scheduler import (
     run_pending,
 )
 from app.plugins.base import DirectLink, PluginError, UnsupportedLink
+from app.retention import sweep
 from app.plugins.registry import call_resolve, registry
 from app.settings_store import read_settings
 from app.ws.routes import router as ws_router
@@ -38,6 +39,10 @@ _POLL_INTERVAL_SECONDS = 2.0
 #: Los crawls son cortos y el usuario está mirando la bandeja, así que se
 #: sondea más seguido que las descargas.
 _CRAWL_POLL_INTERVAL_SECONDS = 1.0
+
+#: El barrido no tiene apuro: lo que libera ya cumplió su función. Correrlo
+#: seguido solo gastaría consultas.
+_SWEEP_INTERVAL_SECONDS = 300.0
 
 
 async def _resolve(url: str, hoster: str) -> DirectLink:
@@ -154,6 +159,29 @@ async def _crawl_loop(stop: asyncio.Event | None = None) -> None:
             await asyncio.wait_for(stop.wait(), timeout=_CRAWL_POLL_INTERVAL_SECONDS)
 
 
+async def _sweep_tick() -> None:
+    async with SessionLocal() as db:
+        freed = await sweep(
+            db,
+            grace_minutes=_settings.retrieval_grace_minutes,
+            max_retention_hours=_settings.max_retention_hours,
+        )
+    if freed:
+        logger.info("liberados %s archivos del servidor", freed)
+
+
+async def _sweep_loop(stop: asyncio.Event | None = None) -> None:
+    """Mismo contrato que los otros loops; ver _scheduler_loop."""
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
+        try:
+            await _sweep_tick()
+        except Exception:  # noqa: BLE001 - un barrido fallido no puede matar el loop
+            logger.exception("sweep tick failed; retrying after the interval")
+        with suppress(TimeoutError):
+            await asyncio.wait_for(stop.wait(), timeout=_SWEEP_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -174,6 +202,7 @@ async def lifespan(app: FastAPI):
     if _settings.scheduler_enabled:
         tasks.append(asyncio.create_task(_scheduler_loop(stop)))
         tasks.append(asyncio.create_task(_crawl_loop(stop)))
+        tasks.append(asyncio.create_task(_sweep_loop(stop)))
     try:
         yield
     finally:

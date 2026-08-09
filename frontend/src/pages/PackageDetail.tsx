@@ -45,7 +45,14 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
                 caption={`${formatBytes(downloaded)} / ${formatBytes(item.total_size)}`}
               />
 
-              {item.status === 'completed' && (
+              {item.status === 'completed' && item.file_removed && (
+                <p className="detail__released">
+                  Ya lo bajaste; el servidor liberó su copia. Volvé a agregar el enlace si lo necesitás
+                  otra vez.
+                </p>
+              )}
+
+              {item.status === 'completed' && !item.file_removed && (
                 // <a download> y no un botón: así lo baja el navegador y queda
                 // en su carpeta de descargas, como cualquier otra descarga.
                 <a className="detail__download" href={fileUrl(pkg.id, item.id)} download={item.filename}>

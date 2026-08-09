@@ -17,6 +17,8 @@ export interface DownloadItem {
   hoster: string
   /** ISO 8601 mientras el hoster pide esperar; null en el caso normal. */
   retry_after: string | null
+  /** El archivo ya se liberó del servidor; la fila queda en el historial. */
+  file_removed: boolean
 }
 
 export interface Package {

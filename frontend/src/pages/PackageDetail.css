@@ -78,3 +78,9 @@
   background: var(--accent);
   color: var(--accent-text);
 }
+
+.detail__released {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

@@ -43,6 +43,9 @@ class DownloadItemResponse(BaseModel):
     error_message: str | None
     hoster: str
     retry_after: dt.datetime | None
+    #: True cuando el archivo ya se liberó del servidor. La fila queda en el
+    #: historial; lo que se fue es el archivo.
+    file_removed: bool
 
     model_config = {"from_attributes": True}
 

@@ -46,9 +46,24 @@ class DownloadItem(Base):
     #: Cuándo vuelve a ser elegible. El item sigue en "queued": para la cola es
     #: trabajo pendiente que todavía no toca, no un estado distinto.
     retry_after: Mapped[dt.datetime | None] = mapped_column(default=None)
+    #: Cuándo el usuario se lo bajó por primera vez. El servidor es un lugar de
+    #: paso: una vez retirado, el archivo se libera.
+    retrieved_at: Mapped[dt.datetime | None] = mapped_column(default=None)
+    #: Cuándo el barrido borró el archivo del disco del servidor. La fila queda
+    #: en el historial; lo que se va es el archivo.
+    file_removed_at: Mapped[dt.datetime | None] = mapped_column(default=None)
 
     package: Mapped["Package"] = relationship(back_populates="items")
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="item", cascade="all, delete-orphan")
+
+    @property
+    def file_removed(self) -> bool:
+        """Si el archivo ya se liberó del servidor.
+
+        Propiedad y no columna: es la misma información que file_removed_at,
+        y duplicarla en la base abriría la puerta a que se contradigan.
+        """
+        return self.file_removed_at is not None
 
 
 class Chunk(Base):
