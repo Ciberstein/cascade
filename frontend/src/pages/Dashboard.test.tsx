@@ -116,7 +116,7 @@ test('clicking a package name shows its detail view', async () => {
           downloaded_bytes: 10,
           error_message: null,
           hoster: 'direct',
-          retry_after: null, file_removed: false, merge_role: null,
+          retry_after: null, file_removed: false, retrieved: false, merge_role: null,
         },
       ],
     },

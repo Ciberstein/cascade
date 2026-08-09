@@ -19,6 +19,8 @@ export interface DownloadItem {
   retry_after: string | null
   /** El archivo ya se liberó del servidor; la fila queda en el historial. */
   file_removed: boolean
+  /** Ya retirado; el navegador no lo vuelve a disparar solo. */
+  retrieved: boolean
   /** 'video'/'audio' mientras se baja una calidad que vino en pistas separadas. */
   merge_role: string | null
 }

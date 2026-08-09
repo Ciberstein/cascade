@@ -66,6 +66,12 @@ class DownloadItem(Base):
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="item", cascade="all, delete-orphan")
 
     @property
+    def retrieved(self) -> bool:
+        """Si el usuario ya se lo llevó. El navegador lo usa para no volver a
+        dispararlo solo en cada sondeo."""
+        return self.retrieved_at is not None
+
+    @property
     def file_removed(self) -> bool:
         """Si el archivo ya se liberó del servidor.
 

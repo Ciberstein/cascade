@@ -150,3 +150,32 @@ async def test_deleting_a_package_frees_its_files(async_auth_client, session, tm
     # Acá sí se borran, al revés que en un gestor que guarda: el servidor es un
     # lugar de paso y la copia del usuario está en su equipo.
     assert not (tmp_path / "video.mp4").exists()
+
+
+@pytest.mark.asyncio
+async def test_the_file_is_released_as_soon_as_it_is_delivered(async_auth_client, session, tmp_path):
+    """El servidor no lo conserva ni un minuto de más.
+
+    Va como tarea de fondo: corre recién cuando la respuesta terminó de
+    enviarse. Si el navegador corta a mitad no llega a correr y el archivo
+    queda para reintentar, que es lo que hay que preservar cuando la descarga
+    se dispara sola y nadie está mirando.
+    """
+    package, item = await _completed(session, tmp_path)
+
+    response = await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
+
+    assert response.content == b"hola!"
+    assert not (tmp_path / "video.mp4").exists()
+
+
+@pytest.mark.asyncio
+async def test_a_delivered_item_says_it_was_retrieved(async_auth_client, session, tmp_path):
+    package, item = await _completed(session, tmp_path)
+
+    await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
+
+    body = (await async_auth_client.get("/packages")).json()
+    entregado = body[0]["items"][0]
+    # Es lo que evita que el navegador vuelva a dispararla sola en cada sondeo.
+    assert entregado["retrieved"] is True

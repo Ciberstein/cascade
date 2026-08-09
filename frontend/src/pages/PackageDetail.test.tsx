@@ -18,7 +18,7 @@ const pkg: Package = {
       downloaded_bytes: 250,
       error_message: null,
       hoster: 'direct',
-      retry_after: null, file_removed: false, merge_role: null,
+      retry_after: null, file_removed: false, retrieved: false, merge_role: null,
     },
     {
       id: 'i2',
@@ -29,7 +29,7 @@ const pkg: Package = {
       downloaded_bytes: 0,
       error_message: 'timeout',
       hoster: 'direct',
-      retry_after: null, file_removed: false, merge_role: null,
+      retry_after: null, file_removed: false, retrieved: false, merge_role: null,
     },
   ],
 }

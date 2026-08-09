@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { deletePackage, listPackages, renamePackage, updatePackageStatus } from '../api/packages'
 import { createCrawlJob } from '../api/crawl'
+import { autoDownloadFinished } from '../autoDownload'
 import { useProgressSocket } from '../ws/useProgressSocket'
 import PackageRow from '../components/PackageRow'
 import AddLinksModal from '../components/AddLinksModal'
@@ -45,12 +46,19 @@ export default function Dashboard() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [view, setView] = useState<View>({ name: 'list' })
+  // Cubre la ventana entre que se dispara una descarga y que el servidor la
+  // marca retirada, donde un sondeo intermedio la dispararía de nuevo.
+  const triggered = useRef<Set<string>>(new Set())
 
   const { progressByItemId } = useProgressSocket()
 
   const refresh = useCallback(async () => {
     try {
-      setPackages(await listPackages())
+      const fetched = await listPackages()
+      setPackages(fetched)
+      // Apenas termina, se lo lleva el navegador: el servidor es un lugar de
+      // paso y lo libera en cuanto lo entrega.
+      autoDownloadFinished(fetched, triggered.current)
       setError(null)
     } catch (e) {
       // A failed poll is usually the backend restarting. Keep the last known

@@ -4,6 +4,7 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
+from starlette.background import BackgroundTask
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -159,7 +160,32 @@ async def download_item_file(
         item.retrieved_at = dt.datetime.utcnow()
         await db.commit()
 
-    return FileResponse(path, filename=item.filename, media_type="application/octet-stream")
+    # El borrado va como tarea de fondo: corre recién cuando la respuesta
+    # terminó de enviarse. Si el navegador corta a mitad, no llega a correr y
+    # el archivo queda para reintentar - que es justo lo que hay que preservar
+    # cuando la descarga se dispara sola y nadie está mirando.
+    return FileResponse(
+        path,
+        filename=item.filename,
+        media_type="application/octet-stream",
+        background=BackgroundTask(_release_after_delivery, path),
+    )
+
+
+def _release_after_delivery(path: str) -> None:
+    """Libera el archivo apenas el usuario lo recibió.
+
+    Solo toca el disco: marcar la fila exigiría abrir otra sesión (la de la
+    request ya se cerró cuando esto corre), y el barrido ya reconcilia los
+    archivos que faltan. Mientras tanto la UI se guía por `retrieved`, que sí
+    se marcó durante la request.
+    """
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.exception("no se pudo liberar %s", path)
 
 
 def _item_path(item: DownloadItem) -> str:

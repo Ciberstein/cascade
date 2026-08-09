@@ -46,6 +46,8 @@ class DownloadItemResponse(BaseModel):
     #: True cuando el archivo ya se liberó del servidor. La fila queda en el
     #: historial; lo que se fue es el archivo.
     file_removed: bool
+    #: Ya retirado por el usuario. El navegador no vuelve a dispararlo solo.
+    retrieved: bool
     #: "video"/"audio" mientras una calidad que vino en pistas separadas se
     #: está bajando; None el resto del tiempo. La parte de audio no se lista:
     #: es un medio, no una descarga que el usuario pidió. Su progreso sí cuenta

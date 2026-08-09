@@ -18,7 +18,7 @@ const pkg: Package = {
       downloaded_bytes: 400,
       error_message: null,
       hoster: 'direct',
-      retry_after: null, file_removed: false, merge_role: null,
+      retry_after: null, file_removed: false, retrieved: false, merge_role: null,
     },
     {
       id: 'i2',
@@ -29,7 +29,7 @@ const pkg: Package = {
       downloaded_bytes: 500,
       error_message: null,
       hoster: 'direct',
-      retry_after: null, file_removed: false, merge_role: null,
+      retry_after: null, file_removed: false, retrieved: false, merge_role: null,
     },
   ],
 }
@@ -126,7 +126,7 @@ test('shows when a waiting item resumes instead of calling it an error', () => {
       {
         ...pkg.items[0],
         status: 'queued',
-        retry_after: new Date(Date.now() + 30 * 60 * 1000).toISOString(), file_removed: false, merge_role: null,
+        retry_after: new Date(Date.now() + 30 * 60 * 1000).toISOString(), file_removed: false, retrieved: false, merge_role: null,
       },
     ],
   }
@@ -152,7 +152,7 @@ test('does not announce a wait for an item that already finished', () => {
       {
         ...pkg.items[0],
         status: 'completed',
-        retry_after: new Date(Date.now() + 30 * 60 * 1000).toISOString(), file_removed: false, merge_role: null,
+        retry_after: new Date(Date.now() + 30 * 60 * 1000).toISOString(), file_removed: false, retrieved: false, merge_role: null,
       },
     ],
   }
@@ -170,7 +170,7 @@ test('does not announce a wait whose time already passed', () => {
       {
         ...pkg.items[0],
         status: 'queued',
-        retry_after: new Date(Date.now() - 60 * 1000).toISOString(), file_removed: false, merge_role: null,
+        retry_after: new Date(Date.now() - 60 * 1000).toISOString(), file_removed: false, retrieved: false, merge_role: null,
       },
     ],
   }
