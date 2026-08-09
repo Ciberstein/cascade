@@ -7,6 +7,7 @@ import pytest
 from app.models import Package
 from app.package_dirs import target_dir_for
 from app.paths import unique_name
+from tests.conftest import TEST_OWNER
 
 
 @pytest.mark.asyncio
@@ -30,7 +31,7 @@ async def test_an_empty_name_still_produces_a_folder(session):
 
 @pytest.mark.asyncio
 async def test_two_packages_with_the_same_name_do_not_share_a_folder(session, tmp_path):
-    session.add(Package(name="Backrooms", status="queued", target_dir=os.path.join("/downloads", "Backrooms")))
+    session.add(Package(name="Backrooms", status="queued", target_dir=os.path.join("/downloads", "Backrooms"), owner_id=TEST_OWNER))
     await session.commit()
 
     result = await target_dir_for(session, "/downloads", "Backrooms")

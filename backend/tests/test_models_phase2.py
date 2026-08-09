@@ -4,11 +4,12 @@ import pytest
 from sqlalchemy import select
 
 from app.models import CrawlJob, CrawlResult, DownloadItem, GlobalSettings, Package
+from tests.conftest import TEST_OWNER
 
 
 @pytest.mark.asyncio
 async def test_crawl_job_holds_the_raw_pasted_text(session):
-    job = CrawlJob(raw_input="http://a/x\nhttp://b/y")
+    job = CrawlJob(raw_input="http://a/x\nhttp://b/y", owner_id=TEST_OWNER)
     session.add(job)
     await session.commit()
 
@@ -20,7 +21,7 @@ async def test_crawl_job_holds_the_raw_pasted_text(session):
 
 @pytest.mark.asyncio
 async def test_crawl_results_hang_off_their_job(session):
-    job = CrawlJob(raw_input="http://a/x")
+    job = CrawlJob(raw_input="http://a/x", owner_id=TEST_OWNER)
     session.add(job)
     await session.flush()
     session.add(
@@ -37,7 +38,7 @@ async def test_crawl_results_hang_off_their_job(session):
 
 @pytest.mark.asyncio
 async def test_download_items_record_their_hoster_and_have_no_wait_by_default(session, tmp_path):
-    package = Package(name="p", status="queued", target_dir=str(tmp_path))
+    package = Package(name="p", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     item = DownloadItem(package_id=package.id, url="http://a/x", filename="x", hoster="direct")

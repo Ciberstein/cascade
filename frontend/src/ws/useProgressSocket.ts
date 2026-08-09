@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ownerToken } from '../api/owner'
 
 interface ProgressMessage {
   type: 'progress'
@@ -6,8 +7,8 @@ interface ProgressMessage {
   downloaded_bytes: number
 }
 
-/** The backend's close code for a missing or expired session cookie. */
-const UNAUTHORIZED_CLOSE_CODE = 4401
+/** Cierre del backend cuando falta el token de dueño o es inválido. */
+const INVALID_OWNER_CLOSE_CODE = 4401
 
 const RECONNECT_DELAY_MS = 2000
 
@@ -16,12 +17,11 @@ const RECONNECT_DELAY_MS = 2000
  *
  * Downloads here run for hours, so the socket has to outlive the blips that
  * happen over that window: any close reconnects after a short delay. The one
- * exception is a rejected session, which can only fail the same way on retry -
- * that surfaces as `unauthorized` so the shell can send the user to login.
+ * exception is a rejected owner token, which can only fail the same way on
+ * retry.
  */
 export function useProgressSocket() {
   const [progressByItemId, setProgressByItemId] = useState<Record<string, number>>({})
-  const [unauthorized, setUnauthorized] = useState(false)
   const socketRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
@@ -33,7 +33,11 @@ export function useProgressSocket() {
 
     function connect() {
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const socket = new WebSocket(`${protocol}://${window.location.host}/ws`)
+      // El token va por query string: la API de WebSocket del navegador no
+      // permite mandar cabeceras propias en el handshake.
+      const socket = new WebSocket(
+        `${protocol}://${window.location.host}/ws?owner=${encodeURIComponent(ownerToken())}`,
+      )
       socketRef.current = socket
 
       socket.onmessage = (event) => {
@@ -45,8 +49,10 @@ export function useProgressSocket() {
 
       socket.onclose = (event) => {
         if (disposed) return
-        if (event.code === UNAUTHORIZED_CLOSE_CODE) {
-          setUnauthorized(true)
+        if (event.code === INVALID_OWNER_CLOSE_CODE) {
+          // Reintentar con el mismo token fallaría igual; el error queda
+          // visible en consola y el resto de la app sigue por sondeo.
+          console.error('el servidor rechazó el identificador de este navegador')
           return
         }
         reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS)
@@ -62,7 +68,7 @@ export function useProgressSocket() {
     }
   }, [])
 
-  return { progressByItemId, unauthorized }
+  return { progressByItemId }
 }
 
 /**

@@ -14,6 +14,7 @@ from app.engine.item_runner import run_download_item
 from app.engine.scheduler import _write_checkpoint, resume_stale_running_items, run_pending
 from app.models import Chunk, DownloadItem, Package
 from app.plugins.base import DirectLink
+from tests.conftest import TEST_OWNER
 
 
 async def _direct_resolver(url: str, hoster: str) -> DirectLink:
@@ -96,7 +97,7 @@ async def test_item_runner_reports_checkpoints_per_chunk(test_server, tmp_path):
 
 @pytest.mark.asyncio
 async def test_write_checkpoint_persists_flushed_offsets(session, tmp_path):
-    package = Package(name="pkg", status="running", target_dir=str(tmp_path))
+    package = Package(name="pkg", status="running", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     item = DownloadItem(package_id=package.id, url="http://x/f", filename="f", status="running")
@@ -136,7 +137,7 @@ async def test_progress_is_committed_while_the_download_is_still_running(
     # mid-download instead of racing loopback throughput.
     _, url = await test_server(payload, stream_delay_seconds=0.01)
 
-    package = Package(name="pkg", status="queued", target_dir=str(tmp_path))
+    package = Package(name="pkg", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     item = DownloadItem(package_id=package.id, url=url, filename="out.bin", status="queued")
@@ -180,7 +181,7 @@ async def test_a_restart_resumes_from_the_persisted_checkpoints(session, test_se
     payload = bytes(range(256)) * 40  # 10240 bytes
     server, url = await test_server(payload)
 
-    package = Package(name="pkg", status="running", target_dir=str(tmp_path))
+    package = Package(name="pkg", status="running", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     item = DownloadItem(

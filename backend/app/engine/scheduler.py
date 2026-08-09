@@ -116,6 +116,10 @@ async def _run_one_item(
     # resolution, directory creation, the resume-chunk lookup) is what threw -
     # see the try's docstring-style comment for why the try starts here and
     # not just around run_download_item.
+    # Se lee una sola vez, fuera de los callbacks: item.package ya viene
+    # cargado y tocarlo desde on_progress dirtiaría la sesión compartida.
+    owner_id = item.package.owner_id if item.package else None
+
     chunks_ref: list[Chunk] = []
     downloaded_so_far = 0
     checkpoint_by_index: dict[int, int] = {}
@@ -184,7 +188,9 @@ async def _run_one_item(
         def on_progress(chunk_index: int, n: int) -> None:
             nonlocal downloaded_so_far
             downloaded_so_far += n
-            _broadcaster.report(item_id=item.id, downloaded_bytes=downloaded_so_far)
+            _broadcaster.report(
+                item_id=item.id, downloaded_bytes=downloaded_so_far, owner_id=owner_id
+            )
 
         # Durable per-chunk offsets, kept in a plain dict for exactly the same
         # reason as downloaded_so_far above: on_checkpoint is a sync callback

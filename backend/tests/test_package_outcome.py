@@ -11,6 +11,7 @@ from sqlalchemy import select
 from app.engine.scheduler import run_pending
 from app.models import DownloadItem, Package
 from app.plugins.base import DirectLink, PluginError
+from tests.conftest import TEST_OWNER
 
 
 async def _boom_resolver(url: str, hoster: str) -> DirectLink:
@@ -22,7 +23,7 @@ async def _direct_resolver(url: str, hoster: str) -> DirectLink:
 
 
 async def _package_with(session, tmp_path, urls):
-    package = Package(name="pkg", status="queued", target_dir=str(tmp_path))
+    package = Package(name="pkg", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     for n, url in enumerate(urls):
@@ -103,7 +104,7 @@ async def test_startup_reconciles_a_package_left_disagreeing_with_its_items(sess
     """
     from app.engine.scheduler import reconcile_package_statuses
 
-    package = Package(name="viejo", status="queued", target_dir=str(tmp_path))
+    package = Package(name="viejo", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     session.add(
@@ -122,7 +123,7 @@ async def test_startup_reconciles_a_package_left_disagreeing_with_its_items(sess
 async def test_reconciliation_leaves_a_package_still_working_alone(session, tmp_path):
     from app.engine.scheduler import reconcile_package_statuses
 
-    package = Package(name="en curso", status="queued", target_dir=str(tmp_path))
+    package = Package(name="en curso", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     session.add_all([
@@ -143,7 +144,7 @@ async def test_reconciliation_leaves_a_package_still_working_alone(session, tmp_
 async def test_reconciliation_does_not_override_a_user_decision(session, tmp_path):
     from app.engine.scheduler import reconcile_package_statuses
 
-    package = Package(name="cancelado", status="canceled", target_dir=str(tmp_path))
+    package = Package(name="cancelado", status="canceled", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     session.add(

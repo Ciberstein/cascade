@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.dependencies import get_current_user
+from app.owner import get_owner
 from app.config import Settings
 from app.database import get_db
-from app.models import CrawlJob, CrawlResult, DownloadItem, Package, User
+from app.models import CrawlJob, CrawlResult, DownloadItem, Package
 from app.schemas import CrawlJobResponse, CreateCrawlJobRequest, PackageResponse, PromoteRequest
 from app.package_dirs import target_dir_for
 from app.paths import unique_name
@@ -22,9 +22,9 @@ _settings = Settings()
 async def create_crawl_job(
     payload: CreateCrawlJobRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    owner: str = Depends(get_owner),
 ):
-    job = CrawlJob(raw_input=payload.links)
+    job = CrawlJob(raw_input=payload.links, owner_id=owner)
     db.add(job)
     await db.commit()
 
@@ -37,10 +37,13 @@ async def create_crawl_job(
 @router.get("", response_model=list[CrawlJobResponse])
 async def list_crawl_jobs(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    owner: str = Depends(get_owner),
 ):
     result = await db.execute(
-        select(CrawlJob).options(selectinload(CrawlJob.results)).order_by(CrawlJob.created_at.desc())
+        select(CrawlJob)
+        .options(selectinload(CrawlJob.results))
+        .where(CrawlJob.owner_id == owner)
+        .order_by(CrawlJob.created_at.desc())
     )
     return result.scalars().all()
 
@@ -49,10 +52,12 @@ async def list_crawl_jobs(
 async def get_crawl_job(
     job_id: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    owner: str = Depends(get_owner),
 ):
     result = await db.execute(
-        select(CrawlJob).options(selectinload(CrawlJob.results)).where(CrawlJob.id == job_id)
+        select(CrawlJob)
+        .options(selectinload(CrawlJob.results))
+        .where(CrawlJob.id == job_id, CrawlJob.owner_id == owner)
     )
     job = result.scalar_one_or_none()
     if job is None:
@@ -65,7 +70,7 @@ async def promote(
     job_id: str,
     payload: PromoteRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    owner: str = Depends(get_owner),
 ):
     """Convierte los resultados elegidos en un paquete descargable.
 
@@ -74,6 +79,14 @@ async def promote(
     deja al scheduler con su contrato simple ("un item en queued es algo para
     bajar") en vez de tener que filtrar filas a medio resolver.
     """
+    owned = await db.execute(
+        select(CrawlJob.id).where(CrawlJob.id == job_id, CrawlJob.owner_id == owner)
+    )
+    if owned.scalar_one_or_none() is None:
+        # Sin esto, conociendo un id de job ajeno se podrían promover sus
+        # resultados al paquete propio.
+        raise HTTPException(status_code=404, detail="Crawl job not found")
+
     result = await db.execute(
         select(CrawlResult).where(
             CrawlResult.crawl_job_id == job_id,
@@ -89,7 +102,7 @@ async def promote(
         raise HTTPException(status_code=404, detail="No matching crawl results")
 
     root = await _download_root(db)
-    package = Package(name=payload.name, status="queued", target_dir="")
+    package = Package(name=payload.name, status="queued", target_dir="", owner_id=owner)
     db.add(package)
     await db.flush()  # populates package.id
     package.target_dir = await target_dir_for(db, root, payload.name)

@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react'
 import { getSettings, updateSettings } from '../api/settings'
-import { UnauthorizedError } from '../api/client'
 import type { AppSettings } from '../types'
 import './Settings.css'
 
 interface Props {
   onClose: () => void
-  onUnauthorized?: () => void
 }
 
 /** Mirrors the Field(ge=…, le=…) bounds on UpdateSettingsRequest. */
@@ -19,7 +17,7 @@ const BOUNDS: Record<NumericKey, { min: number; max?: number }> = {
 
 type NumericKey = 'max_concurrent_downloads' | 'chunks_per_file' | 'max_speed_kbps' | 'max_concurrent_crawls'
 
-export default function Settings({ onClose, onUnauthorized }: Props) {
+export default function Settings({ onClose }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   // Number inputs are held as strings so a half-typed value ("" while
   // retyping) stays exactly what the user sees, instead of being coerced to 0
@@ -45,13 +43,9 @@ export default function Settings({ onClose, onUnauthorized }: Props) {
         })
       })
       .catch((e: unknown) => {
-        if (e instanceof UnauthorizedError) {
-          onUnauthorized?.()
-          return
-        }
         setError(e instanceof Error ? e.message : 'No se pudo cargar la configuración')
       })
-  }, [onUnauthorized])
+  }, [])
 
   if (!settings) {
     return (
@@ -81,10 +75,6 @@ export default function Settings({ onClose, onUnauthorized }: Props) {
       await updateSettings({ ...settings, ...parsed })
       onClose()
     } catch (err) {
-      if (err instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       // Stays open so the rejected values are still on screen to correct.
       setError(err instanceof Error ? err.message : 'No se pudo guardar la configuración')
     } finally {

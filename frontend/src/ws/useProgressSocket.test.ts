@@ -85,14 +85,14 @@ test('reconnects after the server drops the connection', async () => {
   expect(FakeWebSocket.instances.length).toBeGreaterThan(1)
 })
 
-test('stops reconnecting when the server rejects the session', async () => {
+test('stops reconnecting when the server rejects the owner token', async () => {
   vi.useFakeTimers()
   vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket)
 
-  const { result } = renderHook(() => useProgressSocket())
+  renderHook(() => useProgressSocket())
 
-  // 4401 is the backend's "no/expired cookie" close code. Retrying can only
-  // fail the same way, so the hook reports it and lets the shell log out.
+  // 4401 es el cierre del backend ante un token de dueño inválido. Reintentar
+  // con el mismo token fallaría igual.
   act(() => {
     FakeWebSocket.instances[0].onclose?.({ code: 4401 })
   })
@@ -101,7 +101,6 @@ test('stops reconnecting when the server rejects the session', async () => {
   })
 
   expect(FakeWebSocket.instances).toHaveLength(1)
-  expect(result.current.unauthorized).toBe(true)
 })
 
 test('does not reconnect after unmount', async () => {

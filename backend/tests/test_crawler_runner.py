@@ -4,6 +4,7 @@ from sqlalchemy import select
 from app.crawler.core import DiscoveredFile
 from app.crawler.runner import run_pending_crawls
 from app.models import CrawlJob, CrawlResult
+from tests.conftest import TEST_OWNER
 
 
 @pytest.fixture
@@ -30,7 +31,7 @@ def a_file(url="http://x/a.zip", name="a.zip", status="ok"):
 @pytest.mark.asyncio
 async def test_a_pending_job_becomes_done_with_its_results(session, fake_crawl):
     fake_crawl["http://x/a.zip"] = [a_file()]
-    session.add(CrawlJob(raw_input="http://x/a.zip"))
+    session.add(CrawlJob(raw_input="http://x/a.zip", owner_id=TEST_OWNER))
     await session.commit()
 
     await run_pending_crawls(session, max_concurrent=2)
@@ -46,7 +47,7 @@ async def test_a_pending_job_becomes_done_with_its_results(session, fake_crawl):
 async def test_every_line_of_the_paste_is_crawled(session, fake_crawl):
     fake_crawl["http://x/a"] = [a_file(url="http://x/a", name="a")]
     fake_crawl["http://x/b"] = [a_file(url="http://x/b", name="b")]
-    session.add(CrawlJob(raw_input="http://x/a\n\n  http://x/b  \n"))
+    session.add(CrawlJob(raw_input="http://x/a\n\n  http://x/b  \n", owner_id=TEST_OWNER))
     await session.commit()
 
     await run_pending_crawls(session, max_concurrent=2)
@@ -59,7 +60,7 @@ async def test_every_line_of_the_paste_is_crawled(session, fake_crawl):
 async def test_one_bad_link_does_not_sink_the_whole_job(session, fake_crawl):
     fake_crawl["http://x/ok"] = [a_file(url="http://x/ok", name="ok")]
     fake_crawl["http://x/bad"] = RuntimeError("algo raro")
-    session.add(CrawlJob(raw_input="http://x/ok\nhttp://x/bad"))
+    session.add(CrawlJob(raw_input="http://x/ok\nhttp://x/bad", owner_id=TEST_OWNER))
     await session.commit()
 
     await run_pending_crawls(session, max_concurrent=2)
@@ -83,7 +84,7 @@ async def test_a_job_is_not_processed_twice(session, fake_crawl):
     import app.crawler.runner as runner
     runner.crawl_link = counting
 
-    session.add(CrawlJob(raw_input="http://x/a"))
+    session.add(CrawlJob(raw_input="http://x/a", owner_id=TEST_OWNER))
     await session.commit()
 
     await run_pending_crawls(session, max_concurrent=2)
@@ -96,7 +97,7 @@ async def test_a_job_is_not_processed_twice(session, fake_crawl):
 async def test_only_max_concurrent_jobs_are_taken_per_pass(session, fake_crawl):
     for i in range(5):
         fake_crawl[f"http://x/{i}"] = [a_file(url=f"http://x/{i}", name=str(i))]
-        session.add(CrawlJob(raw_input=f"http://x/{i}"))
+        session.add(CrawlJob(raw_input=f"http://x/{i}", owner_id=TEST_OWNER))
     await session.commit()
 
     await run_pending_crawls(session, max_concurrent=2)

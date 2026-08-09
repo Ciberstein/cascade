@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { listPackages, updatePackageStatus } from '../api/packages'
 import { createCrawlJob } from '../api/crawl'
-import { UnauthorizedError } from '../api/client'
 import { useProgressSocket } from '../ws/useProgressSocket'
 import PackageRow from '../components/PackageRow'
 import AddLinksModal from '../components/AddLinksModal'
@@ -11,9 +10,7 @@ import LinkGrabber from './LinkGrabber'
 import type { Package, PackageAction } from '../types'
 import './Dashboard.css'
 
-interface Props {
-  onUnauthorized?: () => void
-}
+
 
 /**
  * Which screen is showing.
@@ -38,7 +35,7 @@ type View =
  */
 const REFRESH_INTERVAL_MS = 3000
 
-export default function Dashboard({ onUnauthorized }: Props) {
+export default function Dashboard() {
   const [packages, setPackages] = useState<Package[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,36 +44,26 @@ export default function Dashboard({ onUnauthorized }: Props) {
   const [createError, setCreateError] = useState<string | null>(null)
   const [view, setView] = useState<View>({ name: 'list' })
 
-  const { progressByItemId, unauthorized } = useProgressSocket()
+  const { progressByItemId } = useProgressSocket()
 
   const refresh = useCallback(async () => {
     try {
       setPackages(await listPackages())
       setError(null)
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       // A failed poll is usually the backend restarting. Keep the last known
       // list on screen and say so, rather than blanking the dashboard.
       setError(e instanceof Error ? e.message : 'No se pudo cargar la lista de paquetes')
     } finally {
       setLoaded(true)
     }
-  }, [onUnauthorized])
+  }, [])
 
   useEffect(() => {
     void refresh()
     const timer = setInterval(() => void refresh(), REFRESH_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [refresh])
-
-  // The socket rejecting the session is the same signal as a 401 on the REST
-  // side; either one means the cookie is gone or expired.
-  useEffect(() => {
-    if (unauthorized) onUnauthorized?.()
-  }, [unauthorized, onUnauthorized])
 
   async function handleAnalyze(urls: string[]) {
     setCreating(true)
@@ -86,10 +73,6 @@ export default function Dashboard({ onUnauthorized }: Props) {
       setShowModal(false)
       setView({ name: 'grabber', jobId: job.id })
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       // El modal queda abierto: cerrarlo tiraría los enlaces recién pegados.
       setCreateError(e instanceof Error ? e.message : 'No se pudo analizar los enlaces')
     } finally {
@@ -102,17 +85,13 @@ export default function Dashboard({ onUnauthorized }: Props) {
       await updatePackageStatus(id, status)
       await refresh()
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       setError(e instanceof Error ? e.message : 'No se pudo actualizar el paquete')
     }
   }
 
   if (view.name === 'settings') {
     return (
-      <SettingsPage onClose={() => setView({ name: 'list' })} onUnauthorized={onUnauthorized} />
+      <SettingsPage onClose={() => setView({ name: 'list' })} />
     )
   }
 
@@ -125,7 +104,6 @@ export default function Dashboard({ onUnauthorized }: Props) {
           setView({ name: 'list' })
           void refresh()
         }}
-        onUnauthorized={onUnauthorized}
       />
     )
   }

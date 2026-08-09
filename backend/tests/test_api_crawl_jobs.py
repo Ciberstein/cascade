@@ -39,9 +39,34 @@ async def test_fetching_an_unknown_job_is_404(async_auth_client):
 
 
 @pytest.mark.asyncio
-async def test_endpoints_require_authentication(async_client):
-    assert (await async_client.post("/crawl-jobs", json={"links": "http://x/a"})).status_code == 401
-    assert (await async_client.get("/crawl-jobs")).status_code == 401
+async def test_a_request_without_an_owner_token_is_rejected(async_client):
+    # Ya no hay login, pero la cabecera de dueño no es opcional: sin ella el
+    # servidor no sabe de quién es nada.
+    async_client.headers.pop("X-Cascade-Owner", None)
+
+    assert (await async_client.post("/crawl-jobs", json={"links": "http://x/a"})).status_code == 400
+    assert (await async_client.get("/crawl-jobs")).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_a_guessable_owner_token_is_rejected(async_client):
+    # El token es la única credencial: uno corto se adivina, y adivinarlo es
+    # leer el historial ajeno.
+    async_client.headers["X-Cascade-Owner"] = "abc"
+
+    assert (await async_client.get("/crawl-jobs")).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_one_browser_never_sees_another_browsers_jobs(async_auth_client):
+    await async_auth_client.post("/crawl-jobs", json={"links": "http://x/mio"})
+
+    # Se cambia en el cliente y no por request: httpx FUSIONA las cabeceras de
+    # ambos niveles, así que pasarla suelta mandaría las dos.
+    async_auth_client.headers["X-Cascade-Owner"] = "otroowner0000000000000000000000b"
+    ajenos = (await async_auth_client.get("/crawl-jobs")).json()
+
+    assert ajenos == []
 
 
 @pytest.mark.asyncio

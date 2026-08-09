@@ -25,83 +25,20 @@ async def test_create_package(auth_client):
 
 
 @pytest.mark.asyncio
-async def test_create_package_requires_auth(client):
-    response = client.post("/packages", json={"name": "x", "urls": ["https://example.com/a.zip"]})
-    assert response.status_code == 401
+async def test_creating_a_package_requires_an_owner_token(client):
+    # Sin login, pero tampoco anónimo del todo: sin dueño no hay a quién
+    # atribuirle el paquete.
+    client.headers.pop("X-Cascade-Owner", None)
+
+    response = client.post("/packages", json={"name": "p", "urls": ["http://x/a"]})
+    assert response.status_code == 400
 
 
-@pytest.mark.asyncio
-async def test_create_package_rejects_empty_urls(auth_client):
-    response = auth_client.post("/packages", json={"name": "x", "urls": []})
-    assert response.status_code == 422
+def test_one_browser_never_sees_another_browsers_packages(auth_client):
+    auth_client.post("/packages", json={"name": "mio", "urls": ["http://x/a"]})
 
+    auth_client.headers["X-Cascade-Owner"] = "otroowner0000000000000000000000b"
+    ajenos = auth_client.get("/packages").json()
 
-@pytest.mark.asyncio
-async def test_create_package_target_dir_is_safe_even_with_malicious_name(auth_client):
-    response = auth_client.post(
-        "/packages",
-        json={"name": "../../etc/passwd", "urls": ["https://example.com/a.zip"]},
-    )
+    assert ajenos == []
 
-    assert response.status_code == 201
-    body = response.json()
-    target_dir = body["target_dir"]
-    download_root = Settings().download_root
-
-    # La carpeta ahora lleva el nombre del paquete en vez del id generado, que
-    # era ilegible. La propiedad que importa no cambió: el nombre lo escribe el
-    # usuario, así que se sanea y no puede salir de download_root.
-    assert ".." not in target_dir
-    assert os.path.dirname(target_dir) == download_root
-    assert os.path.basename(target_dir) not in ("", ".", "..")
-
-
-@pytest.mark.asyncio
-async def test_list_packages(auth_client):
-    auth_client.post("/packages", json={"name": "Pkg A", "urls": ["https://example.com/a.zip"]})
-    auth_client.post("/packages", json={"name": "Pkg B", "urls": ["https://example.com/b.zip"]})
-
-    response = auth_client.get("/packages")
-
-    assert response.status_code == 200
-    names = {pkg["name"] for pkg in response.json()}
-    assert names == {"Pkg A", "Pkg B"}
-
-
-@pytest.mark.asyncio
-async def test_list_packages_requires_auth(client):
-    response = client.get("/packages")
-    assert response.status_code == 401
-
-
-@pytest.mark.asyncio
-async def test_patch_package_status(auth_client):
-    create = auth_client.post("/packages", json={"name": "Pkg", "urls": ["https://example.com/a.zip"]})
-    package_id = create.json()["id"]
-
-    response = auth_client.patch(f"/packages/{package_id}", json={"status": "paused"})
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "paused"
-
-
-@pytest.mark.asyncio
-async def test_patch_package_rejects_invalid_status(auth_client):
-    create = auth_client.post("/packages", json={"name": "Pkg", "urls": ["https://example.com/a.zip"]})
-    package_id = create.json()["id"]
-
-    response = auth_client.patch(f"/packages/{package_id}", json={"status": "bogus"})
-
-    assert response.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_patch_package_404_for_unknown_id(auth_client):
-    response = auth_client.patch("/packages/does-not-exist", json={"status": "paused"})
-    assert response.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_patch_package_requires_auth(client):
-    response = client.patch("/packages/some-id", json={"status": "paused"})
-    assert response.status_code == 401

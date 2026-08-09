@@ -9,6 +9,10 @@ os.environ.setdefault("ADMIN_PASSWORD", "hunter2")
 # DATABASE_URL above every 2s for the length of the run.
 os.environ.setdefault("SCHEDULER_ENABLED", "false")
 
+#: Token de dueño de los tests. 32 caracteres alfanuméricos, como exige
+#: app.owner: sin login, ese token es la identidad.
+TEST_OWNER = "testowner0000000000000000000000a"
+
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
@@ -38,14 +42,14 @@ def client(db_engine):
             yield session
 
     app.dependency_overrides[get_db] = _get_db
-    with TestClient(app) as c:
+    with TestClient(app, headers={"X-Cascade-Owner": TEST_OWNER}) as c:
         yield c
     app.dependency_overrides.clear()
 
 
 @pytest.fixture
 def auth_client(client):
-    client.post("/auth/login", json={"username": "admin", "password": "hunter2"})
+    """Alias histórico: ya no hay login, el cliente ya trae su dueño."""
     return client
 
 
@@ -109,7 +113,9 @@ async def async_client(db_engine):
 
     app.dependency_overrides[get_db] = _get_db
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-Cascade-Owner": TEST_OWNER},
     ) as c:
         yield c
     app.dependency_overrides.clear()
@@ -117,5 +123,5 @@ async def async_client(db_engine):
 
 @pytest_asyncio.fixture
 async def async_auth_client(async_client):
-    await async_client.post("/auth/login", json={"username": "admin", "password": "hunter2"})
+    """Alias histórico: ya no hay login."""
     return async_client

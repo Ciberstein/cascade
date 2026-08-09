@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SAWarning
 
 from app.engine.scheduler import resume_stale_running_items, run_pending
+from tests.conftest import TEST_OWNER
 from app.models import Chunk, DownloadItem, Package
 from app.plugins.base import DirectLink
 
@@ -18,7 +19,7 @@ async def test_run_pending_downloads_queued_item_end_to_end(session, test_server
     payload = b"Z" * 400
     _, url = await test_server(payload, support_range=True)
 
-    package = Package(name="pkg", status="queued", target_dir=str(tmp_path))
+    package = Package(name="pkg", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     item = DownloadItem(package_id=package.id, url=url, filename="out.bin", status="queued")
@@ -45,7 +46,7 @@ async def test_run_pending_respects_concurrency_limit(session, test_server, tmp_
     _, url2 = await test_server(b"B" * 100)
     _, url3 = await test_server(b"C" * 100)
 
-    package = Package(name="pkg", status="queued", target_dir=str(tmp_path))
+    package = Package(name="pkg", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     for i, url in enumerate([url1, url2, url3]):
@@ -83,7 +84,7 @@ async def test_run_pending_concurrent_items_do_not_corrupt_shared_session(sessio
     with warnings.catch_warnings():
         warnings.simplefilter("error", category=SAWarning)
 
-        package = Package(name="pkg", status="queued", target_dir=str(tmp_path))
+        package = Package(name="pkg", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
         session.add(package)
         await session.flush()
         _, url1 = await test_server(b"A" * 500)
@@ -101,7 +102,7 @@ async def test_run_pending_concurrent_items_do_not_corrupt_shared_session(sessio
 
 @pytest.mark.asyncio
 async def test_resume_stale_running_items_requeues_them(session):
-    package = Package(name="pkg", status="running", target_dir="/tmp")
+    package = Package(name="pkg", status="running", target_dir="/tmp", owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     item = DownloadItem(package_id=package.id, url="https://example.com/x", filename="x", status="running")

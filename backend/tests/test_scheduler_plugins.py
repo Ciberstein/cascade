@@ -6,10 +6,11 @@ from sqlalchemy import select
 from app.engine.scheduler import run_pending
 from app.models import DownloadItem, Package
 from app.plugins.base import DirectLink, LinkDead, RateLimited
+from tests.conftest import TEST_OWNER
 
 
 async def one_item(session, tmp_path, url, **item_kwargs):
-    package = Package(name="pkg", status="queued", target_dir=str(tmp_path))
+    package = Package(name="pkg", status="queued", target_dir=str(tmp_path), owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
     item = DownloadItem(

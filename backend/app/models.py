@@ -13,18 +13,13 @@ def _uuid() -> str:
     return str(uuid.uuid4())
 
 
-class User(Base):
-    __tablename__ = "users"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    username: Mapped[str] = mapped_column(String(64), unique=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
-
-
 class Package(Base):
     __tablename__ = "packages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    #: Token anónimo del navegador que lo creó. No hay login: este token es la
+    #: identidad, y toda consulta se filtra por él.
+    owner_id: Mapped[str] = mapped_column(String(128), index=True)
     name: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="queued")
     target_dir: Mapped[str] = mapped_column(String(1024))
@@ -86,6 +81,7 @@ class CrawlJob(Base):
     __tablename__ = "crawl_jobs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    owner_id: Mapped[str] = mapped_column(String(128), index=True)
     raw_input: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     created_at: Mapped[dt.datetime] = mapped_column(default=dt.datetime.utcnow)

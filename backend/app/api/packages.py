@@ -5,10 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.auth.dependencies import get_current_user
+from app.owner import get_owner
 from app.config import Settings
 from app.database import get_db
-from app.models import DownloadItem, Package, User
+from app.models import DownloadItem, Package
 from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageStatusRequest
 from app.package_dirs import target_dir_for
 from app.settings_store import read_settings
@@ -37,9 +37,11 @@ async def _target_dir_root(db: AsyncSession) -> str:
 @router.get("", response_model=list[PackageResponse])
 async def list_packages(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    owner: str = Depends(get_owner),
 ):
-    result = await db.execute(select(Package).options(selectinload(Package.items)))
+    result = await db.execute(
+        select(Package).options(selectinload(Package.items)).where(Package.owner_id == owner)
+    )
     return result.scalars().all()
 
 
@@ -47,9 +49,9 @@ async def list_packages(
 async def create_package(
     payload: CreatePackageRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    owner: str = Depends(get_owner),
 ):
-    package = Package(name=payload.name, status="queued", target_dir="")
+    package = Package(name=payload.name, status="queued", target_dir="", owner_id=owner)
     db.add(package)
     await db.flush()  # populates package.id
 
@@ -79,10 +81,14 @@ async def update_package_status(
     package_id: str,
     payload: UpdatePackageStatusRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    owner: str = Depends(get_owner),
 ):
     result = await db.execute(
-        select(Package).options(selectinload(Package.items)).where(Package.id == package_id)
+        select(Package)
+        .options(selectinload(Package.items))
+        # El dueño va en el WHERE, no en un chequeo posterior: así un id de otro
+        # dueño da 404 en vez de 403, y no confirma que ese paquete exista.
+        .where(Package.id == package_id, Package.owner_id == owner)
     )
     package = result.scalar_one_or_none()
     if package is None:

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCrawlJob, promoteResults } from '../api/crawl'
-import { UnauthorizedError } from '../api/client'
 import StatusBadge from '../components/StatusBadge'
 import { formatBytes } from '../format'
 import type { CrawlJob } from '../types'
@@ -10,12 +9,11 @@ interface Props {
   jobId: string
   onDone: () => void
   onBack: () => void
-  onUnauthorized?: () => void
 }
 
 const POLL_INTERVAL_MS = 1000
 
-export default function LinkGrabber({ jobId, onDone, onBack, onUnauthorized }: Props) {
+export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
   const [job, setJob] = useState<CrawlJob | null>(null)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectionInitialized = useRef(false)
@@ -41,13 +39,9 @@ export default function LinkGrabber({ jobId, onDone, onBack, onUnauthorized }: P
         setSelected(new Set(fetched.results.filter((r) => r.status === 'ok').map((r) => r.id)))
       }
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       setError(e instanceof Error ? e.message : 'No se pudo cargar el análisis')
     }
-  }, [jobId, onUnauthorized])
+  }, [jobId])
 
   useEffect(() => {
     void refresh()
@@ -77,10 +71,6 @@ export default function LinkGrabber({ jobId, onDone, onBack, onUnauthorized }: P
       await promoteResults(jobId, name.trim() || 'Paquete sin nombre', [...selected])
       onDone()
     } catch (err) {
-      if (err instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       setError(err instanceof Error ? err.message : 'No se pudo crear el paquete')
     } finally {
       setSubmitting(false)

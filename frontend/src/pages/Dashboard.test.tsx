@@ -5,7 +5,6 @@ import * as packagesApi from '../api/packages'
 import * as crawlApi from '../api/crawl'
 import * as settingsApi from '../api/settings'
 import * as socketHook from '../ws/useProgressSocket'
-import { UnauthorizedError } from '../api/client'
 import type { Package } from '../types'
 
 afterEach(() => {
@@ -13,8 +12,8 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-function stubSocket(progressByItemId: Record<string, number> = {}, unauthorized = false) {
-  vi.spyOn(socketHook, 'useProgressSocket').mockReturnValue({ progressByItemId, unauthorized })
+function stubSocket(progressByItemId: Record<string, number> = {}) {
+  vi.spyOn(socketHook, 'useProgressSocket').mockReturnValue({ progressByItemId })
 }
 
 const pkg: Package = { id: 'p1', name: 'Pkg 1', status: 'running', target_dir: '/x', items: [] }
@@ -165,22 +164,3 @@ test('falls back to the list when the open package disappears', async () => {
   await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument())
 })
 
-test('reports an expired session to the shell', async () => {
-  vi.spyOn(packagesApi, 'listPackages').mockRejectedValue(new UnauthorizedError('nope'))
-  stubSocket()
-  const onUnauthorized = vi.fn()
-
-  render(<Dashboard onUnauthorized={onUnauthorized} />)
-
-  await waitFor(() => expect(onUnauthorized).toHaveBeenCalled())
-})
-
-test('reports an expired session detected by the socket', async () => {
-  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
-  stubSocket({}, true)
-  const onUnauthorized = vi.fn()
-
-  render(<Dashboard onUnauthorized={onUnauthorized} />)
-
-  await waitFor(() => expect(onUnauthorized).toHaveBeenCalled())
-})
