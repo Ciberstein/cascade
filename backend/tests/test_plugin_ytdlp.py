@@ -269,3 +269,55 @@ def test_a_video_only_format_is_dropped_when_there_is_no_audio_to_pair():
 
     # Ofrecerlo daría un video mudo.
     assert _variants([VIDEO_ONLY]) == []
+
+
+def test_the_audio_must_fit_the_video_container():
+    """El fallo real con un short de YouTube.
+
+    Elegir el audio por bitrate a secas emparejaba un video VP9 con audio AAC,
+    y ffmpeg fallaba con "Only VP8 or VP9 or AV1 video and Vorbis or Opus audio
+    are supported for WebM" - recién después de bajar las dos pistas enteras.
+    """
+    from app.plugins.ytdlp import _variants
+
+    vp9 = {"format_id": "303", "url": "https://cdn/v", "protocol": "https", "ext": "webm",
+           "vcodec": "vp09", "acodec": "none", "height": 1080}
+    aac = {"format_id": "140", "url": "https://cdn/a1", "protocol": "https", "ext": "m4a",
+           "vcodec": "none", "acodec": "mp4a", "abr": 128}
+    opus = {"format_id": "251", "url": "https://cdn/a2", "protocol": "https", "ext": "webm",
+            "vcodec": "none", "acodec": "opus", "abr": 100}
+
+    variant = _variants([vp9, aac, opus])[0]
+
+    # El AAC tiene más bitrate, pero no entra en un WebM.
+    assert variant.audio_format == "251"
+    assert variant.ext == "webm"
+
+
+def test_an_mp4_video_gets_the_mp4_audio():
+    from app.plugins.ytdlp import _variants
+
+    h264 = {"format_id": "137", "url": "https://cdn/v", "protocol": "https", "ext": "mp4",
+            "vcodec": "avc1", "acodec": "none", "height": 1080}
+    aac = {"format_id": "140", "url": "https://cdn/a1", "protocol": "https", "ext": "m4a",
+           "vcodec": "none", "acodec": "mp4a", "abr": 128}
+    opus = {"format_id": "251", "url": "https://cdn/a2", "protocol": "https", "ext": "webm",
+            "vcodec": "none", "acodec": "opus", "abr": 160}
+
+    variant = _variants([h264, aac, opus])[0]
+
+    # Opus tiene más bitrate, pero un MP4 no lo acepta.
+    assert variant.audio_format == "140"
+    assert variant.ext == "mp4"
+
+
+def test_a_video_with_no_compatible_audio_is_not_offered():
+    from app.plugins.ytdlp import _variants
+
+    vp9 = {"format_id": "303", "url": "https://cdn/v", "protocol": "https", "ext": "webm",
+           "vcodec": "vp09", "acodec": "none", "height": 1080}
+    aac = {"format_id": "140", "url": "https://cdn/a", "protocol": "https", "ext": "m4a",
+           "vcodec": "none", "acodec": "mp4a", "abr": 128}
+
+    # Ofrecerla llevaría a bajar dos pistas para que ffmpeg falle al final.
+    assert _variants([vp9, aac]) == []

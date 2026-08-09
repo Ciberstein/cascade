@@ -20,6 +20,10 @@ class Variant:
     audio_format: str | None = None
     height: int | None = None
     size: int | None = None
+    #: Contenedor del resultado ("mp4", "webm"). El nombre del archivo tiene
+    #: que terminar en esta extensión: un .webm con audio AAC adentro no se
+    #: puede escribir, y un .mp4 con VP9 tampoco.
+    ext: str | None = None
 
     @property
     def needs_merge(self) -> bool:

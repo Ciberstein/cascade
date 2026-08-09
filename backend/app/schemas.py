@@ -129,6 +129,7 @@ class VariantResponse(BaseModel):
     height: int | None = None
     size: int | None = None
     needs_merge: bool = False
+    ext: str | None = None
 
 
 class CrawlResultResponse(BaseModel):

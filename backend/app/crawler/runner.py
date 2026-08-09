@@ -93,6 +93,7 @@ async def _run_one_job(db: AsyncSession, db_lock: asyncio.Lock, job: CrawlJob) -
                                     "height": v.height,
                                     "size": v.size,
                                     "needs_merge": v.needs_merge,
+                                    "ext": v.ext,
                                     "video_format": v.video_format,
                                     "audio_format": v.audio_format,
                                 }

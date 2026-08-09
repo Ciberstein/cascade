@@ -268,7 +268,7 @@ def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
         f for f in formats
         if f.get("url") and str(f.get("protocol") or "").startswith("http")
     ]
-    best_audio = _best_audio(http)
+    audios = [f for f in http if f.get("acodec") not in (None, "none") and f.get("vcodec") == "none"]
 
     candidates: dict[object, Variant] = {}
     for fmt in http:
@@ -279,13 +279,15 @@ def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
         # desconocido como ausente marcaría para unir formatos que ya traen
         # audio - los "sd"/"hd" de Facebook son justamente así.
         needs_audio = fmt.get("acodec") == "none"
-        audio_format = str(best_audio["format_id"]) if (needs_audio and best_audio) else None
-        if needs_audio and audio_format is None:
-            continue  # no hay audio con qué completarlo: no se puede entregar
+        audio = _audio_for(fmt, audios) if needs_audio else None
+        if needs_audio and audio is None:
+            continue  # no hay audio compatible con qué completarlo
+
+        audio_format = str(audio["format_id"]) if audio else None
 
         size = (fmt.get("filesize") or fmt.get("filesize_approx") or 0)
-        if audio_format:
-            size += (best_audio or {}).get("filesize") or (best_audio or {}).get("filesize_approx") or 0
+        if audio:
+            size += audio.get("filesize") or audio.get("filesize_approx") or 0
 
         height = fmt.get("height")
         variant = Variant(
@@ -295,6 +297,7 @@ def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
             audio_format=audio_format,
             height=height,
             size=size or None,
+            ext=fmt.get("ext"),
         )
 
         key = height if height is not None else str(fmt.get("format_id"))
@@ -311,8 +314,21 @@ def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
     return con_altura + list(reversed(sin_altura))
 
 
-def _best_audio(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
-    audio = [f for f in formats if f.get("acodec") not in (None, "none") and f.get("vcodec") == "none"]
-    if not audio:
+#: Qué audio puede convivir con qué video en un mismo contenedor. Meter AAC en
+#: un WebM, o VP9 en un MP4, no es una preferencia: el contenedor lo rechaza y
+#: ffmpeg no escribe nada.
+_COMPATIBLE_AUDIO_EXT = {"webm": {"webm", "opus"}, "mp4": {"m4a", "mp4"}, "m4a": {"m4a", "mp4"}}
+
+
+def _audio_for(video: dict[str, Any], audios: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """El mejor audio que el contenedor del video acepte.
+
+    Elegir por bitrate a secas rompía la unión: para un video VP9 tomaba el
+    AAC, y "Only VP8 or VP9 or AV1 video and Vorbis or Opus audio are supported
+    for WebM" hacía fallar a ffmpeg después de bajar las dos pistas enteras.
+    """
+    allowed = _COMPATIBLE_AUDIO_EXT.get(str(video.get("ext") or "").lower())
+    usable = [a for a in audios if allowed is None or str(a.get("ext") or "").lower() in allowed]
+    if not usable:
         return None
-    return max(audio, key=lambda f: f.get("abr") or f.get("tbr") or 0)
+    return max(usable, key=lambda f: f.get("abr") or f.get("tbr") or 0)

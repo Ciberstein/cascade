@@ -110,7 +110,10 @@ async def promote(
     taken: set[str] = set()
     for found in chosen:
         variant = _chosen_variant(found, payload.quality.get(found.id))
-        filename = unique_name(found.filename, taken)
+        # La extensión sale de la calidad elegida, no del formato por defecto:
+        # un .webm con audio AAC adentro no se puede escribir, y ffmpeg falla
+        # recién después de haber bajado las dos pistas enteras.
+        filename = unique_name(_with_ext(found.filename, variant), taken)
 
         if variant and variant.get("needs_merge"):
             # Esta calidad viene en pistas separadas: se encolan las dos y el
@@ -159,6 +162,15 @@ async def promote(
     )
     return created.scalar_one()
 
+
+
+def _with_ext(filename: str, variant: dict | None) -> str:
+    """Reemplaza la extensión por la del contenedor de la calidad elegida."""
+    ext = (variant or {}).get("ext")
+    if not ext:
+        return filename
+    stem = filename.rsplit(".", 1)[0] if "." in filename else filename
+    return f"{stem}.{ext}"
 
 
 def _chosen_variant(found, variant_id: str | None) -> dict | None:
