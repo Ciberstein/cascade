@@ -13,3 +13,12 @@ export function createPackage(name: string, urls: string[]): Promise<Package> {
 export function updatePackageStatus(id: string, status: PackageAction): Promise<Package> {
   return apiFetch(`/packages/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
 }
+
+export function renamePackage(id: string, name: string): Promise<Package> {
+  return apiFetch(`/packages/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) })
+}
+
+/** Saca el paquete de la lista. Los archivos ya descargados quedan en disco. */
+export function deletePackage(id: string): Promise<void> {
+  return apiFetch(`/packages/${id}`, { method: 'DELETE' })
+}

@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
+from app.api.account import router as account_router
 from app.api.crawl_jobs import router as crawl_jobs_router
 from app.api.packages import router as packages_router
 from app.api.settings import router as settings_router
@@ -186,6 +187,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Cascade", lifespan=lifespan)
+app.include_router(account_router)
 app.include_router(crawl_jobs_router)
 app.include_router(packages_router)
 app.include_router(settings_router)

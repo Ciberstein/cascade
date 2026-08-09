@@ -116,3 +116,19 @@ class CrawlResult(Base):
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
 
     job: Mapped["CrawlJob"] = relationship(back_populates="results")
+
+
+class User(Base):
+    """Cuenta opcional. No es una puerta de entrada, es un recuperador.
+
+    Su única función es dejar volver a obtener `owner_id` desde otro
+    dispositivo. Por eso `owner_id` es único y no cambia nunca: registrarse no
+    mueve un solo registro de lo ya descargado.
+    """
+
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    username: Mapped[str] = mapped_column(String(64), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    owner_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)

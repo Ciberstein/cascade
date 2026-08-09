@@ -62,8 +62,11 @@ class DownloadItemResponse(BaseModel):
         return aware.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-class UpdatePackageStatusRequest(BaseModel):
-    status: Literal["queued", "paused", "canceled"]
+class UpdatePackageRequest(BaseModel):
+    """Cambiar el estado, el nombre, o ambos."""
+
+    status: Literal["queued", "paused", "canceled"] | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class PackageResponse(BaseModel):
@@ -132,3 +135,20 @@ class CrawlJobResponse(BaseModel):
 class PromoteRequest(BaseModel):
     name: str = Field(min_length=1)
     result_ids: list[str] = Field(min_length=1)
+
+
+class CredentialsRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    # Piso deliberadamente bajo pero no nulo: la cuenta protege una lista de
+    # descargas, no una cuenta bancaria, y un mínimo alto empuja a reutilizar.
+    password: str = Field(min_length=8, max_length=200)
+
+
+class AccountResponse(BaseModel):
+    """username es None cuando este navegador todavía no se registró."""
+
+    username: str | None
+
+
+class OwnerTokenResponse(BaseModel):
+    owner_token: str

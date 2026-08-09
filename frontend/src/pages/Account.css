@@ -1,0 +1,50 @@
+.account {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-width: 30rem;
+}
+
+.account__header {
+  display: flex;
+}
+
+.account__title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.account__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.account__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.account__field label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.account__error {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--danger);
+}
+
+.account__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.account__primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}

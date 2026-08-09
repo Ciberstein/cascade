@@ -37,7 +37,7 @@ const pkg: Package = {
 const noop = () => {}
 
 test('renders package name, status, and aggregate progress', () => {
-  render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} />)
+  render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
   expect(screen.getByText('My package')).toBeInTheDocument()
   expect(screen.getByText('running')).toBeInTheDocument()
@@ -56,6 +56,8 @@ test('prefers live progress over the last persisted byte count', () => {
       onPause={noop}
       onResume={noop}
       onCancel={noop}
+      onDelete={noop}
+      onRename={noop}
     />,
   )
 
@@ -67,7 +69,7 @@ test('shows 0% instead of NaN before any size is known', () => {
     ...pkg,
     items: [{ ...pkg.items[0], total_size: null, downloaded_bytes: 0 }],
   }
-  render(<PackageRow package={unsized} onPause={noop} onResume={noop} onCancel={noop} />)
+  render(<PackageRow package={unsized} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
   expect(screen.getByText('0%')).toBeInTheDocument()
 })
@@ -75,7 +77,7 @@ test('shows 0% instead of NaN before any size is known', () => {
 test('offers pause while running and resume while paused', () => {
   const onPause = vi.fn()
   const { rerender } = render(
-    <PackageRow package={pkg} onPause={onPause} onResume={noop} onCancel={noop} />,
+    <PackageRow package={pkg} onPause={onPause} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />,
   )
 
   fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
@@ -89,6 +91,8 @@ test('offers pause while running and resume while paused', () => {
       onPause={noop}
       onResume={onResume}
       onCancel={noop}
+      onDelete={noop}
+      onRename={noop}
     />,
   )
 
@@ -106,6 +110,8 @@ test('hides cancel once the package is finished', () => {
       onPause={noop}
       onResume={noop}
       onCancel={noop}
+      onDelete={noop}
+      onRename={noop}
     />,
   )
 
@@ -125,7 +131,7 @@ test('shows when a waiting item resumes instead of calling it an error', () => {
     ],
   }
 
-  render(<PackageRow package={waiting} onPause={noop} onResume={noop} onCancel={noop} />)
+  render(<PackageRow package={waiting} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
   // "Esto está agendado" y "esto se rompió" se confunden fácil, y la confusión
   // hace que la gente cancele descargas que iban bien.
@@ -133,7 +139,7 @@ test('shows when a waiting item resumes instead of calling it an error', () => {
 })
 
 test('does not claim a wait when there is none', () => {
-  render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} />)
+  render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
   expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
 })
 
@@ -151,7 +157,7 @@ test('does not announce a wait for an item that already finished', () => {
     ],
   }
 
-  render(<PackageRow package={stale} onPause={noop} onResume={noop} onCancel={noop} />)
+  render(<PackageRow package={stale} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
   expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
 })
@@ -169,7 +175,49 @@ test('does not announce a wait whose time already passed', () => {
     ],
   }
 
-  render(<PackageRow package={past} onPause={noop} onResume={noop} onCancel={noop} />)
+  render(<PackageRow package={past} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
   expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
+})
+
+test('deleting says the downloaded file is kept', () => {
+  const onDelete = vi.fn()
+  render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={onDelete} onRename={noop} />)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }))
+
+  // La confirmación vive en el Dashboard; la fila solo avisa la intención.
+  expect(onDelete).toHaveBeenCalledWith('pkg-1')
+})
+
+test('renaming asks for the new name and skips an empty one', () => {
+  const onRename = vi.fn()
+  const prompt = vi.spyOn(window, 'prompt')
+
+  render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={onRename} />)
+
+  prompt.mockReturnValue('   ')
+  fireEvent.click(screen.getByRole('button', { name: 'Renombrar' }))
+  // La API rechaza un nombre vacío; no vale la pena viajar para que falle.
+  expect(onRename).not.toHaveBeenCalled()
+
+  prompt.mockReturnValue('  Backrooms  ')
+  fireEvent.click(screen.getByRole('button', { name: 'Renombrar' }))
+  expect(onRename).toHaveBeenCalledWith('pkg-1', 'Backrooms')
+
+  prompt.mockRestore()
+})
+
+test('a finished package can still be renamed and deleted', () => {
+  render(
+    <PackageRow
+      package={{ ...pkg, status: 'completed' }}
+      onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop}
+    />,
+  )
+
+  // Cancelar deja de tener sentido al terminar, pero limpiar la lista no.
+  expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Renombrar' })).toBeInTheDocument()
 })

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { listPackages, updatePackageStatus } from '../api/packages'
+import { deletePackage, listPackages, renamePackage, updatePackageStatus } from '../api/packages'
 import { createCrawlJob } from '../api/crawl'
 import { useProgressSocket } from '../ws/useProgressSocket'
 import PackageRow from '../components/PackageRow'
 import AddLinksModal from '../components/AddLinksModal'
 import PackageDetail from './PackageDetail'
 import SettingsPage from './Settings'
+import Account from './Account'
 import LinkGrabber from './LinkGrabber'
 import type { Package, PackageAction } from '../types'
 import './Dashboard.css'
@@ -24,6 +25,7 @@ type View =
   | { name: 'detail'; packageId: string }
   | { name: 'settings' }
   | { name: 'grabber'; jobId: string }
+  | { name: 'account' }
 
 /**
  * How often the package list is refetched.
@@ -80,6 +82,29 @@ export default function Dashboard() {
     }
   }
 
+  async function handleRename(id: string, name: string) {
+    try {
+      await renamePackage(id, name)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo renombrar el paquete')
+    }
+  }
+
+  async function handleDelete(id: string) {
+    // Se avisa que el archivo queda: "eliminar" suena a que borra el archivo,
+    // y no lo hace.
+    if (!window.confirm('¿Quitar este paquete de la lista? Los archivos ya descargados no se borran.')) {
+      return
+    }
+    try {
+      await deletePackage(id)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el paquete')
+    }
+  }
+
   async function handleStatusChange(id: string, status: PackageAction) {
     try {
       await updatePackageStatus(id, status)
@@ -87,6 +112,21 @@ export default function Dashboard() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo actualizar el paquete')
     }
+  }
+
+  if (view.name === 'account') {
+    return (
+      <Account
+        onClose={() => setView({ name: 'list' })}
+        onIdentityChanged={() => {
+          // Iniciar sesión cambia el token de dueño: la lista que se estaba
+          // mostrando ya no es la de este navegador.
+          setPackages([])
+          setView({ name: 'list' })
+          void refresh()
+        }}
+      />
+    )
   }
 
   if (view.name === 'settings') {
@@ -128,6 +168,7 @@ export default function Dashboard() {
       <div className="dashboard__toolbar">
         <h1 className="dashboard__title">Descargas</h1>
         <div className="dashboard__toolbar-actions">
+          <button onClick={() => setView({ name: 'account' })}>Cuenta</button>
           <button onClick={() => setView({ name: 'settings' })}>Configuración</button>
           <button className="dashboard__primary" onClick={() => setShowModal(true)}>
             Agregar enlaces
@@ -153,6 +194,8 @@ export default function Dashboard() {
               onPause={(id) => void handleStatusChange(id, 'paused')}
               onResume={(id) => void handleStatusChange(id, 'queued')}
               onCancel={(id) => void handleStatusChange(id, 'canceled')}
+              onRename={(id, name) => void handleRename(id, name)}
+              onDelete={(id) => void handleDelete(id)}
               onOpen={(id) => setView({ name: 'detail', packageId: id })}
             />
           ))}

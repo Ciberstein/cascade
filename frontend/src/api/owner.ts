@@ -27,3 +27,13 @@ function generate(): string {
   crypto.getRandomValues(bytes)
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
+
+/**
+ * Adopta el token de una cuenta al iniciar sesión en otro dispositivo.
+ *
+ * Reemplaza el token anónimo de este navegador: lo que se hubiera descargado
+ * acá antes de iniciar sesión deja de verse, porque pertenece al token viejo.
+ */
+export function setOwnerToken(token: string): void {
+  localStorage.setItem(STORAGE_KEY, token)
+}

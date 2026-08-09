@@ -11,6 +11,8 @@ interface Props {
   onPause: (id: string) => void
   onResume: (id: string) => void
   onCancel: (id: string) => void
+  onDelete: (id: string) => void
+  onRename: (id: string, name: string) => void
   onOpen?: (id: string) => void
 }
 
@@ -22,6 +24,8 @@ export default function PackageRow({
   onPause,
   onResume,
   onCancel,
+  onDelete,
+  onRename,
   onOpen,
 }: Props) {
   const totalSize = pkg.items.reduce((sum, i) => sum + (i.total_size ?? 0), 0)
@@ -77,6 +81,18 @@ export default function PackageRow({
             Cancelar
           </button>
         )}
+        <button
+          onClick={() => {
+            const name = window.prompt('Nuevo nombre del paquete', pkg.name)
+            // null es cancelar el diálogo; vacío es un nombre que la API rechaza.
+            if (name !== null && name.trim() !== '') onRename(pkg.id, name.trim())
+          }}
+        >
+          Renombrar
+        </button>
+        <button className="package-row__danger" onClick={() => onDelete(pkg.id)}>
+          Eliminar
+        </button>
       </div>
     </div>
   )

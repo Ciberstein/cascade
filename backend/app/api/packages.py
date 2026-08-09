@@ -9,7 +9,7 @@ from app.owner import get_owner
 from app.config import Settings
 from app.database import get_db
 from app.models import DownloadItem, Package
-from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageStatusRequest
+from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageRequest
 from app.package_dirs import target_dir_for
 from app.settings_store import read_settings
 
@@ -77,9 +77,9 @@ async def create_package(
 
 
 @router.patch("/{package_id}", response_model=PackageResponse)
-async def update_package_status(
+async def update_package(
     package_id: str,
-    payload: UpdatePackageStatusRequest,
+    payload: UpdatePackageRequest,
     db: AsyncSession = Depends(get_db),
     owner: str = Depends(get_owner),
 ):
@@ -94,7 +94,48 @@ async def update_package_status(
     if package is None:
         raise HTTPException(status_code=404, detail="Package not found")
 
-    package.status = payload.status
+    if payload.status is not None:
+        package.status = payload.status
+    if payload.name is not None:
+        # Solo el nombre visible. La carpeta en disco NO se renombra: los
+        # archivos ya bajados viven ahí, y moverlos a mitad de una descarga
+        # rompería las escrituras en curso.
+        package.name = payload.name
+
     await db.commit()
     await db.refresh(package, attribute_names=["items"])
     return package
+
+
+@router.delete("/{package_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_package(
+    package_id: str,
+    db: AsyncSession = Depends(get_db),
+    owner: str = Depends(get_owner),
+):
+    """Saca el paquete de la lista.
+
+    Los archivos ya descargados **no** se borran: quedan en la carpeta, igual
+    que cuando un navegador borra una descarga de su historial. Borrar el
+    trabajo terminado de alguien porque quiso limpiar su lista sería una
+    sorpresa cara y sin vuelta atrás.
+    """
+    result = await db.execute(
+        select(Package)
+        .options(selectinload(Package.items))
+        .where(Package.id == package_id, Package.owner_id == owner)
+    )
+    package = result.scalar_one_or_none()
+    if package is None:
+        raise HTTPException(status_code=404, detail="Package not found")
+
+    if any(i.status == "running" for i in package.items):
+        # El motor tiene archivos abiertos y va a seguir escribiendo checkpoints
+        # sobre filas que ya no existirían.
+        raise HTTPException(
+            status_code=409,
+            detail="Hay archivos descargando; pausá o cancelá el paquete antes de eliminarlo",
+        )
+
+    await db.delete(package)
+    await db.commit()
