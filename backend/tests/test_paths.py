@@ -40,6 +40,35 @@ def test_absurdly_long_names_are_truncated():
     assert len(safe_filename("x" * 5000)) <= 200
 
 
+def test_truncation_keeps_the_extension():
+    """El fallo real con un video de Facebook.
+
+    El título del post pasaba los 200 caracteres, el recorte cortaba por el
+    final y se llevaba puesto el ".mp4". El archivo quedaba sin extensión y el
+    sistema operativo no sabía con qué abrirlo.
+    """
+    name = "t" * 400 + ".mp4"
+
+    result = safe_filename(name)
+
+    assert result.endswith(".mp4")
+    assert len(result) <= 200
+
+
+def test_a_title_full_of_dots_is_not_mistaken_for_an_extension():
+    # Sin tope al largo del sufijo, "....una frase larguisima" pasaría por
+    # extensión y el recorte conservaría basura en vez del nombre.
+    name = "a" * 300 + ".esto no es una extension sino parte del titulo"
+
+    result = safe_filename(name)
+
+    assert len(result) <= 200
+
+
+def test_a_long_name_without_any_extension_still_fits():
+    assert len(safe_filename("z" * 400)) <= 200
+
+
 def test_ensure_within_accepts_a_path_inside_the_package(tmp_path):
     inside = os.path.join(str(tmp_path), "a.bin")
     assert ensure_within(str(tmp_path), inside) == inside

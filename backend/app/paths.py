@@ -18,6 +18,9 @@ _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 _MAX_FILENAME = 200
 
+#: Más largo que esto no es una extensión, es un título con puntos.
+_MAX_EXTENSION = 12
+
 
 def safe_filename(name: str, fallback: str = "download") -> str:
     """Reduce `name` a un nombre de archivo que no puede salir de su carpeta.
@@ -34,7 +37,27 @@ def safe_filename(name: str, fallback: str = "download") -> str:
 
     if not cleaned:
         return fallback
-    return cleaned[:_MAX_FILENAME]
+    return _truncate_keeping_extension(cleaned)
+
+
+def _truncate_keeping_extension(name: str) -> str:
+    """Recorta por el medio, no por el final, para no perder la extensión.
+
+    Los títulos de video pasan de largo el límite con facilidad, y cortar a
+    ciegas se lleva puesto el ".mp4": el archivo queda sin extensión y el
+    sistema operativo no sabe con qué abrirlo.
+    """
+    if len(name) <= _MAX_FILENAME:
+        return name
+
+    stem, dot, ext = name.rpartition(".")
+    # Sin punto, o con un "sufijo" tan largo que no puede ser una extensión
+    # (un título con puntos en el medio), se recorta y ya.
+    if not dot or not ext or len(ext) > _MAX_EXTENSION:
+        return name[:_MAX_FILENAME]
+
+    keep = _MAX_FILENAME - len(ext) - 1
+    return f"{stem[:keep]}.{ext}"
 
 
 def ensure_within(base_dir: str, path: str) -> str:
