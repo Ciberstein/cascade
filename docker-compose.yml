@@ -17,9 +17,6 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://cascade:${POSTGRES_PASSWORD:-cascade}@postgres:5432/cascade
-      JWT_SECRET: ${JWT_SECRET}
-      ADMIN_USERNAME: ${ADMIN_USERNAME}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       # Only the default for a fresh install - once the settings row exists,
       # the download folder saved from the UI wins.
       DOWNLOAD_ROOT: /downloads
