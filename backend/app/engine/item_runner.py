@@ -18,7 +18,10 @@ class ItemResult:
 
 
 async def _probe(url: str, headers: dict[str, str] | None = None) -> tuple[int, bool]:
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    # follow_redirects: httpx no las sigue por defecto y casi todo enlace de
+    # descarga real redirige a un CDN o a un espejo. Sin esto, un 301 perfectamente
+    # normal termina como "error" en la cola.
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         response = await client.head(url, headers=headers or {})
         response.raise_for_status()
 

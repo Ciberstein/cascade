@@ -61,7 +61,10 @@ async def download_chunk(
 
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            # Mismo motivo que en el probe: sin seguir redirecciones, un enlace
+            # que apunta a un CDN falla. El Range viaja en el request y httpx lo
+            # reenvía al destino.
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 # El Range va último a propósito: lo calcula el motor de chunks,
                 # y que un plugin lo pise corrompería el archivo en silencio.
                 request_headers = {**(headers or {}), "Range": f"bytes={range_start}-{end}"}

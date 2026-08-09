@@ -341,14 +341,37 @@ async def run_pending(
         if _on_start_for_test:
             _on_start_for_test(item.id)
 
+    # Se capturan ANTES del gather: el camino de error de _run_one_item hace
+    # db.rollback(), que expira el estado en memoria de todas las instancias de
+    # la sesión compartida - también las de los items que sí terminaron bien.
+    # Leerles un atributo después dispara una recarga perezosa fuera del
+    # contexto greenlet y revienta con MissingGreenlet, y entonces el paquete
+    # nunca cambia de estado. Solo se nota cuando en un mismo lote conviven un
+    # éxito y un fallo.
+    package_ids = {item.package_id for item in items}
+
     await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, resolver) for item in items))
 
-    package_ids = {item.package_id for item in items}
     for package_id in package_ids:
         pkg_result = await db.execute(select(Package).where(Package.id == package_id))
         package = pkg_result.scalar_one()
         items_result = await db.execute(select(DownloadItem).where(DownloadItem.package_id == package_id))
         pkg_items = items_result.scalars().all()
-        if pkg_items and all(i.status == "completed" for i in pkg_items):
+        if not pkg_items:
+            continue
+
+        # Un paquete solo cambia de estado cuando ya no queda nada por hacer.
+        # "queued" y "running" siguen en curso; "paused" y "canceled" son
+        # decisiones del usuario que no deben disparar un veredicto.
+        if any(i.status in ("queued", "running") for i in pkg_items):
+            continue
+
+        if all(i.status == "completed" for i in pkg_items):
             package.status = "completed"
+        elif any(i.status == "error" for i in pkg_items):
+            # Antes faltaba esta rama: con todos sus items fallidos el paquete
+            # se quedaba en "queued" para siempre, y el dashboard mostraba 0%
+            # sin ninguna señal de error. Había que abrir el detalle para
+            # enterarse de que no estaba descargando nada.
+            package.status = "error"
     await db.commit()
