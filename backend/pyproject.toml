@@ -22,6 +22,9 @@ dependencies = [
     # Parser HTML para los plugins. selectolax sobre bs4: es C puro, no arrastra
     # soup-sieve/lxml, y el parseo ocurre dentro del loop de crawl.
     "selectolax>=0.3.21",
+    # ~1750 sitios de video. Se actualiza seguido porque los sitios cambian
+    # seguido: conviene fijar un piso y dejar que suba, no clavarlo.
+    "yt-dlp>=2025.1.1",
 ]
 
 [project.optional-dependencies]
