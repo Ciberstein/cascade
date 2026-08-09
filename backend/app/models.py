@@ -68,7 +68,6 @@ class GlobalSettings(Base):
     __tablename__ = "settings"
 
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
-    download_root: Mapped[str] = mapped_column(String(1024), default="/downloads")
     max_concurrent_downloads: Mapped[int] = mapped_column(default=3)
     chunks_per_file: Mapped[int] = mapped_column(default=4)
     max_speed_kbps: Mapped[int] = mapped_column(default=0)

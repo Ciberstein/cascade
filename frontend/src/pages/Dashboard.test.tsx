@@ -133,7 +133,6 @@ test('clicking a package name shows its detail view', async () => {
 test('opens and closes the settings view', async () => {
   vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
   vi.spyOn(settingsApi, 'getSettings').mockResolvedValue({
-    download_root: '/downloads',
     max_concurrent_downloads: 3,
     chunks_per_file: 4,
     max_speed_kbps: 0,

@@ -1,4 +1,5 @@
 import ProgressBar from '../components/ProgressBar'
+import { fileUrl } from '../api/packages'
 import StatusBadge from '../components/StatusBadge'
 import { formatBytes, percentOf } from '../format'
 import type { Package } from '../types'
@@ -43,6 +44,14 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
                 percent={percent}
                 caption={`${formatBytes(downloaded)} / ${formatBytes(item.total_size)}`}
               />
+
+              {item.status === 'completed' && (
+                // <a download> y no un botón: así lo baja el navegador y queda
+                // en su carpeta de descargas, como cualquier otra descarga.
+                <a className="detail__download" href={fileUrl(pkg.id, item.id)} download={item.filename}>
+                  Descargar a mi equipo
+                </a>
+              )}
 
               {item.error_message && (
                 <p className="detail__error" role="alert">

@@ -12,7 +12,6 @@ from app.models import CrawlJob, CrawlResult, DownloadItem, Package
 from app.schemas import CrawlJobResponse, CreateCrawlJobRequest, PackageResponse, PromoteRequest
 from app.package_dirs import target_dir_for
 from app.paths import unique_name
-from app.settings_store import read_settings
 
 router = APIRouter(prefix="/crawl-jobs", tags=["crawl"])
 _settings = Settings()
@@ -101,7 +100,7 @@ async def promote(
     if not chosen:
         raise HTTPException(status_code=404, detail="No matching crawl results")
 
-    root = await _download_root(db)
+    root = _download_root()
     package = Package(name=payload.name, status="queued", target_dir="", owner_id=owner)
     db.add(package)
     await db.flush()  # populates package.id
@@ -136,6 +135,6 @@ async def promote(
 
 
 
-async def _download_root(db: AsyncSession) -> str:
-    row = await read_settings(db)
-    return row.download_root if row is not None else _settings.download_root
+def _download_root() -> str:
+    """Ver _target_dir_root en api/packages.py: es infraestructura, no ajuste."""
+    return _settings.download_root

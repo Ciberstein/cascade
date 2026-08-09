@@ -80,7 +80,13 @@ class PackageResponse(BaseModel):
 
 
 class SettingsResponse(BaseModel):
-    download_root: str
+    """Solo lo que el usuario puede decidir.
+
+    La carpeta del servidor no está: el archivo se entrega al navegador y este
+    lo guarda donde guarda todo. Dónde lo deja el servidor mientras tanto es
+    una decisión de infraestructura (DOWNLOAD_ROOT), no una opción de usuario.
+    """
+
     max_concurrent_downloads: int
     chunks_per_file: int
     max_speed_kbps: int
@@ -90,7 +96,6 @@ class SettingsResponse(BaseModel):
 
 
 class UpdateSettingsRequest(BaseModel):
-    download_root: str
     max_concurrent_downloads: int = Field(ge=1, le=20)
     chunks_per_file: int = Field(ge=1, le=16)
     max_speed_kbps: int = Field(ge=0)

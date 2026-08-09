@@ -1,6 +1,7 @@
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -11,6 +12,7 @@ from app.database import get_db
 from app.models import DownloadItem, Package
 from app.schemas import CreatePackageRequest, PackageResponse, UpdatePackageRequest
 from app.package_dirs import target_dir_for
+from app.paths import ensure_within, safe_filename
 from app.settings_store import read_settings
 
 router = APIRouter(prefix="/packages", tags=["packages"])
@@ -22,16 +24,14 @@ def _filename_from_url(url: str) -> str:
     return name or "download"
 
 
-async def _target_dir_root(db: AsyncSession) -> str:
-    """Where new packages are stored, preferring the user's saved setting.
+def _target_dir_root() -> str:
+    """Dónde el servidor guarda lo que descarga, mientras el usuario lo retira.
 
-    Resolved per request, not at import: otherwise the "Carpeta de descarga"
-    field would persist a value that nothing ever reads. Existing packages
-    keep the target_dir they were created with - moving files already on disk
-    is not something a settings change should do behind the user's back.
+    Sale del entorno y no de la configuración: el usuario recibe sus archivos
+    por el navegador, así que esta ruta es una decisión de infraestructura
+    (qué disco, qué volumen) y no algo que tenga sentido ofrecerle.
     """
-    row = await read_settings(db)
-    return row.download_root if row is not None else _settings.download_root
+    return _settings.download_root
 
 
 @router.get("", response_model=list[PackageResponse])
@@ -55,7 +55,7 @@ async def create_package(
     db.add(package)
     await db.flush()  # populates package.id
 
-    package.target_dir = await target_dir_for(db, await _target_dir_root(db), payload.name)
+    package.target_dir = await target_dir_for(db, _target_dir_root(), payload.name)
 
     for url in payload.urls:
         db.add(
@@ -105,6 +105,58 @@ async def update_package(
     await db.commit()
     await db.refresh(package, attribute_names=["items"])
     return package
+
+
+@router.get("/{package_id}/items/{item_id}/file")
+async def download_item_file(
+    package_id: str,
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    owner: str = Depends(get_owner),
+):
+    """Entrega el archivo al navegador, que lo guarda donde guarda todo.
+
+    Cascade descarga al disco del servidor; la carpeta de descargas del usuario
+    está en su máquina. Este endpoint es el puente: el navegador se lo baja de
+    acá con Content-Disposition, y termina en su carpeta de siempre sin que
+    nadie tenga que configurar ninguna ruta.
+    """
+    result = await db.execute(
+        select(DownloadItem)
+        .join(Package)
+        .where(
+            DownloadItem.id == item_id,
+            DownloadItem.package_id == package_id,
+            Package.owner_id == owner,
+        )
+        .options(selectinload(DownloadItem.package))
+    )
+    item = result.scalar_one_or_none()
+    if item is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if item.status != "completed":
+        # A medio bajar el archivo existe pero está incompleto, y entregarlo
+        # daría un archivo corrupto que parece bueno.
+        raise HTTPException(status_code=409, detail="La descarga todavía no terminó")
+
+    path = _item_path(item)
+    if not os.path.isfile(path):
+        # Alguien lo borró de la carpeta del servidor por fuera de Cascade.
+        raise HTTPException(status_code=410, detail="El archivo ya no está en el servidor")
+
+    return FileResponse(path, filename=item.filename, media_type="application/octet-stream")
+
+
+def _item_path(item: DownloadItem) -> str:
+    """Ruta en disco, contenida dentro de la carpeta del paquete.
+
+    Se recalcula igual que en el motor en vez de guardarse: así el chequeo de
+    contención se aplica también acá, y una fila manipulada no puede hacer que
+    el servidor entregue un archivo de fuera del paquete.
+    """
+    package_dir = item.package.target_dir
+    return ensure_within(package_dir, os.path.join(package_dir, safe_filename(item.filename)))
 
 
 @router.delete("/{package_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -44,16 +44,15 @@ async def test_the_speed_cap_follows_the_settings_row(session):
     assert limiter.rate_bytes_per_second == 0
 
 
-@pytest.mark.asyncio
-async def test_download_root_falls_back_to_env_on_a_fresh_install(session):
-    assert await _target_dir_root(session) == "/downloads"
+def test_the_download_root_comes_from_the_environment_only():
+    """Dejó de ser un ajuste de usuario.
+
+    El archivo se entrega al navegador, que lo guarda donde guarda todo; dónde
+    lo deja el servidor mientras tanto es infraestructura. Antes esto se leía
+    de la fila de settings y se ofrecía en la UI.
+    """
+    from app.api.packages import _target_dir_root
+
+    assert _target_dir_root() == "/downloads"
 
 
-@pytest.mark.asyncio
-async def test_download_root_follows_the_settings_row(session):
-    session.add(GlobalSettings(id=1, download_root="/mnt/media"))
-    await session.commit()
-
-    # Previously new packages always landed under the env DOWNLOAD_ROOT, so the
-    # "Carpeta de descarga" field silently did nothing.
-    assert await _target_dir_root(session) == "/mnt/media"

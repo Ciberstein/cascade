@@ -22,3 +22,14 @@ export function renamePackage(id: string, name: string): Promise<Package> {
 export function deletePackage(id: string): Promise<void> {
   return apiFetch(`/packages/${id}`, { method: 'DELETE' })
 }
+
+/**
+ * URL desde la que el navegador se baja el archivo.
+ *
+ * No pasa por apiFetch a propósito: se usa como href, para que la descarga la
+ * haga el navegador y termine en su carpeta de siempre. Traerla por fetch la
+ * dejaría en memoria, que es justo lo contrario de lo que se quiere.
+ */
+export function fileUrl(packageId: string, itemId: string): string {
+  return `/packages/${packageId}/items/${itemId}/file`
+}

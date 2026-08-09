@@ -86,16 +86,6 @@ export default function Settings({ onClose }: Props) {
     <form className="settings" onSubmit={handleSubmit}>
       <h1 className="settings__title">Configuración</h1>
 
-      <div className="settings__field">
-        <label htmlFor="download-root">Carpeta de descarga</label>
-        <input
-          id="download-root"
-          value={settings.download_root}
-          onChange={(e) => setSettings({ ...settings, download_root: e.target.value })}
-        />
-        <p className="settings__hint">Se aplica a los paquetes nuevos; los existentes conservan su carpeta.</p>
-      </div>
-
       <NumberField
         id="max-concurrent"
         label="Descargas simultáneas"

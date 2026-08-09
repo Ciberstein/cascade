@@ -7,7 +7,6 @@ import type { AppSettings } from '../types'
 afterEach(() => vi.restoreAllMocks())
 
 const saved: AppSettings = {
-  download_root: '/downloads',
   max_concurrent_downloads: 3,
   chunks_per_file: 4,
   max_speed_kbps: 0,

@@ -64,3 +64,21 @@ test('does not report a failed item as 0% of nothing', () => {
   expect(errored).not.toBeNull()
   expect(errored).toHaveTextContent('timeout')
 })
+
+test('a finished file offers a link the browser will download', () => {
+  render(<PackageDetail package={{ ...pkg, items: [{ ...pkg.items[0], status: 'completed' }] }} onBack={() => {}} />)
+
+  const link = screen.getByRole('link', { name: /Descargar a mi equipo/ })
+  // href + download: así lo baja el navegador y queda en su carpeta de
+  // descargas. Cascade baja al servidor; este enlace es el puente hasta el
+  // equipo del usuario.
+  expect(link).toHaveAttribute('href', '/packages/p1/items/i1/file')
+  expect(link).toHaveAttribute('download', 'a.zip')
+})
+
+test('an unfinished file offers nothing to download yet', () => {
+  render(<PackageDetail package={pkg} onBack={() => {}} />)
+
+  // El archivo existe a medio escribir; ofrecerlo daría algo corrupto.
+  expect(screen.queryByRole('link', { name: /Descargar/ })).not.toBeInTheDocument()
+})

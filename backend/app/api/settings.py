@@ -27,7 +27,6 @@ async def update_settings(
     owner: str = Depends(get_owner),
 ):
     row = await _get_or_create_settings(db)
-    row.download_root = payload.download_root
     row.max_concurrent_downloads = payload.max_concurrent_downloads
     row.chunks_per_file = payload.chunks_per_file
     row.max_speed_kbps = payload.max_speed_kbps

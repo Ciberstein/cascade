@@ -28,7 +28,6 @@ export interface Package {
 }
 
 export interface AppSettings {
-  download_root: string
   max_concurrent_downloads: number
   chunks_per_file: number
   /** 0 means unlimited. */
