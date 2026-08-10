@@ -42,3 +42,28 @@ def test_one_browser_never_sees_another_browsers_packages(auth_client):
 
     assert ajenos == []
 
+
+
+def test_a_browser_navigation_identifies_itself_with_the_cookie(client):
+    """Una descarga es una navegación, no una llamada de API.
+
+    Un <a download> no puede mandar cabeceras propias, así que sin aceptar la
+    cookie el endpoint que entrega el archivo respondía 400 y el navegador
+    mostraba "error desconocido en el servidor".
+    """
+    from tests.conftest import TEST_OWNER
+
+    client.headers.pop("X-Cascade-Owner", None)
+    client.cookies.set("cascade_owner", TEST_OWNER)
+
+    assert client.get("/packages").status_code == 200
+
+
+def test_the_header_still_wins_when_both_are_present(client):
+    from tests.conftest import TEST_OWNER
+
+    client.cookies.set("cascade_owner", "otroowner0000000000000000000000b")
+    client.headers["X-Cascade-Owner"] = TEST_OWNER
+
+    # El cliente de API es explícito; la cookie es el respaldo para navegaciones.
+    assert client.get("/packages").status_code == 200

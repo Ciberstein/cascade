@@ -10,9 +10,13 @@ loguea. Cuando exista el registro de cuentas, una cuenta será simplemente un
 token que además se puede recuperar desde otro dispositivo.
 """
 
-from fastapi import Header, HTTPException, status
+from fastapi import Cookie, Header, HTTPException, status
 
 OWNER_HEADER = "X-Cascade-Owner"
+#: Mismo token, en cookie. Hace falta porque una descarga es una navegación
+#: normal del navegador - un <a download> no puede mandar cabeceras propias -
+#: y sin esto el endpoint que entrega el archivo respondía 400.
+OWNER_COOKIE = "cascade_owner"
 
 #: Un uuid4 en hexadecimal son 32 caracteres. Se exige eso como piso para que
 #: el token no sea adivinable: sin login, adivinarlo es acceder al historial
@@ -42,9 +46,17 @@ def _validate(token: str | None) -> str:
     return token
 
 
-async def get_owner(x_cascade_owner: str | None = Header(default=None)) -> str:
-    """Dueño de los datos de esta request."""
-    return _validate(x_cascade_owner)
+async def get_owner(
+    x_cascade_owner: str | None = Header(default=None),
+    cascade_owner: str | None = Cookie(default=None),
+) -> str:
+    """Dueño de los datos de esta request.
+
+    La cabecera es lo normal (la pone el cliente de API). La cookie cubre las
+    navegaciones del navegador, que no pueden llevar cabeceras propias: la
+    descarga de un archivo es exactamente ese caso.
+    """
+    return _validate(x_cascade_owner or cascade_owner)
 
 
 def owner_from_query(token: str | None) -> str | None:
