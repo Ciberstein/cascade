@@ -21,11 +21,11 @@ services:
       # the download folder saved from the UI wins.
       DOWNLOAD_ROOT: /downloads
     volumes:
-      # Volumen gestionado por Docker, no una carpeta del host. Acá el servidor
-      # solo estaciona archivos hasta que el usuario los retira por el
-      # navegador, y después los borra: es estado interno, y ponerlo en una
-      # carpeta que el usuario ve invita a que lo borre y rompa las descargas
-      # (que es exactamente lo que pasó).
+      # A Docker-managed volume, not a host folder. The server only parks
+      # files here until the browser retrieves them, then deletes them: it is
+      # internal state, and putting it in a folder the user can see invites
+      # them to delete it and break downloads (which is exactly what
+      # happened).
       - staging:/downloads
     restart: unless-stopped
     depends_on:
@@ -35,10 +35,10 @@ services:
   frontend:
     build: ./frontend
     ports:
-      # Solo desde esta máquina. Ya no hay login: dejarlo en 0.0.0.0 pondría
-      # a disposición de cualquiera en la red la capacidad de encolar descargas
-      # y de cambiar los límites del motor. Para abrirlo a la red hay que
-      # decidirlo a propósito: BIND_ADDRESS=0.0.0.0 en el .env.
+      # This machine only. There is no login any more: leaving it on 0.0.0.0
+      # would hand anyone on the network the ability to queue downloads and
+      # change the engine limits. Opening it up has to be deliberate:
+      # BIND_ADDRESS=0.0.0.0 in .env.
       - "${BIND_ADDRESS:-127.0.0.1}:8080:80"
     restart: unless-stopped
     depends_on:

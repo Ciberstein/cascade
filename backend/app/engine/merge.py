@@ -116,4 +116,4 @@ async def _merge(target_dir: str, video: DownloadItem, audio: DownloadItem) -> N
         try:
             os.remove(path)
         except OSError:
-            logger.exception("no se pudo borrar la parte %s", path)
+            logger.exception("could not delete the part file %s", path)

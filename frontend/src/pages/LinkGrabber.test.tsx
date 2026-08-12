@@ -93,7 +93,7 @@ test('stops polling once the job is done', async () => {
 test('submit is disabled when nothing is selected', async () => {
   vi.spyOn(crawlApi, 'getCrawlJob').mockResolvedValue({
     ...doneJob,
-    results: [doneJob.results[1]], // solo el muerto
+    results: [doneJob.results[1]], // the dead one only
   })
 
   render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)

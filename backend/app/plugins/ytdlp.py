@@ -15,6 +15,7 @@ reason.
 
 import asyncio
 import logging
+import os
 from typing import Any, Callable
 from urllib.parse import urlsplit, urlunsplit
 
@@ -40,6 +41,48 @@ _YDL_OPTS = {
     "skip_download": True,
 }
 
+#: Escape hatch for sites that refuse the default player client.
+#:
+#: YouTube treats datacenter addresses with far more suspicion than home ones:
+#: the same link that works from a laptop answers "Sign in to confirm you're
+#: not a bot" from a cloud host. Impersonating another client often gets
+#: through, but which one works changes as YouTube patches and yt-dlp adapts.
+#:
+#: So it is a variable rather than a constant: when the current answer stops
+#: working, it changes in the platform's dashboard and the next request picks
+#: it up - no code change, no rebuild, no redeploy. Empty means yt-dlp's own
+#: defaults, which is right everywhere that isn't fighting us.
+#:
+#: Takes yt-dlp's own --extractor-args syntax, e.g.
+#:     youtube:player_client=tv,web_safari
+_EXTRACTOR_ARGS_ENV = "YTDLP_EXTRACTOR_ARGS"
+
+
+def parse_extractor_args(raw: str) -> dict[str, dict[str, list[str]]]:
+    """Turns yt-dlp's CLI --extractor-args syntax into the dict its API wants.
+
+    The CLI spells it "IE:key=v1,v2;key2=v3"; the Python API wants
+    {"ie": {"key": ["v1", "v2"], "key2": ["v3"]}}. Accepting the CLI spelling
+    means whatever is found in a yt-dlp issue thread can be pasted straight
+    into the dashboard.
+
+    Anything malformed yields {} rather than raising: this is a knob turned
+    under pressure, usually while something is already broken, and a typo in it
+    must not take the plugin down on top of that.
+    """
+    ie, separator, rest = raw.strip().partition(":")
+    if not separator or not ie.strip():
+        return {}
+
+    args: dict[str, list[str]] = {}
+    for part in rest.split(";"):
+        key, equals, values = part.partition("=")
+        if not equals or not key.strip():
+            continue
+        args[key.strip()] = [v.strip() for v in values.split(",") if v.strip()]
+
+    return {ie.strip().lower(): args} if args else {}
+
 
 class YtDlpHoster:
     name = "ytdlp"
@@ -56,7 +99,7 @@ class YtDlpHoster:
         `direct` and `open_directory` handle better.
         """
         if self._extract is not None:
-            return True  # instancia de test: el guion decide
+            return True  # test instance: the script decides
         return has_extractor(canonical_url(url))
 
     async def crawl(self, url: str) -> CrawlResult:
@@ -120,6 +163,12 @@ class YtDlpHoster:
         url = canonical_url(url) if self._extract is None else url
 
         opts = dict(_YDL_OPTS)
+        # Read per call, not captured at import: the whole point is being able
+        # to change it from the platform's variables and have the next request
+        # use it, without a rebuild.
+        extractor_args = parse_extractor_args(os.environ.get(_EXTRACTOR_ARGS_ENV, ""))
+        if extractor_args:
+            opts["extractor_args"] = extractor_args
         if flat:
             # List a playlist without resolving each video: the tray needs the
             # titles, not the final URLs, which expire anyway.
@@ -135,7 +184,7 @@ class YtDlpHoster:
             # loop would block the whole process: the scheduler, the progress
             # WebSocket and the entire API, for seconds per video.
             return await asyncio.to_thread(_extract_sync, url, opts)
-        except Exception as exc:  # noqa: BLE001 - se traduce al vocabulario del contrato
+        except Exception as exc:  # noqa: BLE001 - translated into the contract's vocabulary
             raise _translate(exc, url) from exc
 
 
@@ -145,8 +194,8 @@ def has_extractor(url: str) -> bool:
         from yt_dlp.extractor import gen_extractor_classes
 
         return any(ie.IE_NAME != "generic" and ie.suitable(url) for ie in gen_extractor_classes())
-    except Exception:  # noqa: BLE001 - esto corre dentro de can_handle, que no puede tumbar el registro
-        logger.exception("no se pudo consultar los extractores de yt-dlp")
+    except Exception:  # noqa: BLE001 - runs inside can_handle, which must not take the registry down
+        logger.exception("could not query the yt-dlp extractors")
         return False
 
 

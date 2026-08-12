@@ -3,7 +3,7 @@
 import pytest
 
 from app.plugins.base import LinkDead, PluginError, UnsupportedLink
-from app.plugins.ytdlp import PLUGIN, YtDlpHoster
+from app.plugins.ytdlp import parse_extractor_args, PLUGIN, YtDlpHoster
 
 PROGRESSIVE = {
     "format_id": "18",
@@ -321,3 +321,27 @@ def test_a_video_with_no_compatible_audio_is_not_offered():
 
     # Ofrecerla llevaría a bajar dos pistas para que ffmpeg falle al final.
     assert _variants([vp9, aac]) == []
+
+
+def test_extractor_args_take_the_syntax_yt_dlp_documents():
+    # The knob is turned by pasting what a yt-dlp issue thread says, so it has
+    # to accept the CLI spelling rather than a shape of our own invention.
+    assert parse_extractor_args("youtube:player_client=tv,web_safari") == {
+        "youtube": {"player_client": ["tv", "web_safari"]}
+    }
+    assert parse_extractor_args("youtube:player_client=tv;formats=incomplete") == {
+        "youtube": {"player_client": ["tv"], "formats": ["incomplete"]}
+    }
+
+
+def test_a_malformed_extractor_arg_is_ignored_rather_than_fatal():
+    # It gets edited in a dashboard while something is already broken. A typo
+    # there must not take the plugin down on top of whatever prompted it.
+    for raw in ("", "   ", "youtube", "youtube:", ":player_client=tv", "nonsense"):
+        assert parse_extractor_args(raw) == {}
+
+
+def test_nothing_configured_leaves_yt_dlp_on_its_own_defaults():
+    # Every site that isn't fighting us works untouched; the override only
+    # exists for the ones that are.
+    assert parse_extractor_args("") == {}
