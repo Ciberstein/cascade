@@ -220,8 +220,9 @@ class YtDlpHoster:
         # Otherwise walk the clients until one gets through. Only a block moves
         # on to the next; everything else is the answer and is raised as it is.
         global _working_client
+        order = _client_order()
         last: PluginError | None = None
-        for client in _client_order():
+        for client in order:
             attempt = dict(opts)
             if client is not None:
                 attempt["extractor_args"] = {"youtube": {"player_client": [client]}}
@@ -230,6 +231,7 @@ class YtDlpHoster:
             except PluginError as exc:
                 if not _is_blocked(exc):
                     raise
+                logger.info("player client %s was blocked on %s", client or "default", url)
                 last = exc
                 continue
 
@@ -240,7 +242,15 @@ class YtDlpHoster:
                 _working_client = client
             return info
 
-        raise last if last is not None else PluginError(f"{url}: no player client got through")
+        # Says outright that the search happened and came up empty. Without
+        # this the screen shows yt-dlp's raw complaint, which reads exactly the
+        # same whether every client was tried or none of them were - so the one
+        # question worth answering ("is the fallback even running?") could only
+        # be settled by reading server logs.
+        raise PluginError(
+            f"{url}: blocked on all {len(order)} player clients, so this server's "
+            f"address is the problem rather than the video. Last answer: {last}"
+        )
 
     async def _attempt(self, url: str, flat: bool, opts: dict) -> dict[str, Any]:
         # The error translation wraps the injected extractor too: that is

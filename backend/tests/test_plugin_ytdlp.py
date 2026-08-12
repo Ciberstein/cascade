@@ -413,3 +413,20 @@ def test_the_default_client_stays_near_the_front_after_a_fallback(monkeypatch):
     assert order[0] == "tv"
     assert order[1] is None
     assert len(order) == len(set(map(str, order)))
+
+
+@pytest.mark.asyncio
+async def test_being_blocked_everywhere_says_so_instead_of_echoing_yt_dlp(monkeypatch):
+    monkeypatch.setattr(ytdlp_mod, "_working_client", None)
+
+    def always_blocked(url, flat):
+        raise RuntimeError(BOT_CHECK)
+
+    with pytest.raises(PluginError) as caught:
+        await ytdlp_mod.YtDlpHoster(extract=always_blocked).crawl("https://youtube.com/watch?v=a")
+
+    # yt-dlp's raw complaint reads identically whether every client was tried or
+    # none were, which left the one useful question answerable only from server
+    # logs. The message now carries the answer.
+    assert "blocked on all" in str(caught.value)
+    assert "address is the problem" in str(caught.value)
