@@ -11,11 +11,11 @@ class WebSocketLike(Protocol):
 
 
 class ConnectionManager:
-    """Conexiones abiertas, cada una atada a su dueño.
+    """Open connections, each tied to its owner.
 
-    El progreso se entrega solo a quien es dueño de esa descarga. Sin esa
-    separación, una única emisión a todos filtraría a cada visitante los ids y
-    el avance de las descargas ajenas.
+    Progress is delivered only to whoever owns that download. Without that
+    separation, a single broadcast to everyone would leak every visitor the ids
+    and the progress of other people's downloads.
     """
 
     def __init__(self) -> None:
@@ -29,10 +29,10 @@ class ConnectionManager:
         self._connections = [(o, w) for o, w in self._connections if w is not websocket]
 
     async def broadcast(self, data: dict[str, Any]) -> None:
-        """Envía `data` a las conexiones de su dueño.
+        """Sends `data` to its owner's connections.
 
-        El dueño viaja dentro del payload y se quita antes de enviarlo: le dice
-        al manager a quién entregar, y al cliente no le aporta nada.
+        The owner travels inside the payload and is stripped before sending: it
+        tells the manager who to deliver to, and adds nothing for the client.
         """
         owner_id = data.get("owner_id")
         payload = {k: v for k, v in data.items() if k != "owner_id"}

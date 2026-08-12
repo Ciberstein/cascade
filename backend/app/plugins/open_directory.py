@@ -1,7 +1,7 @@
-"""Índices de directorio abiertos (autoindex de nginx/Apache).
+"""Open directory indexes (nginx/Apache autoindex).
 
-Es el caso más simple de "un link contiene N archivos", y sirve de plantilla
-para cualquier plugin que expanda una carpeta.
+The simplest case of "one link contains N files", and a template for any
+plugin that expands a folder.
 """
 
 import re
@@ -12,7 +12,7 @@ from selectolax.parser import HTMLParser
 
 from app.plugins.base import CrawledFile, CrawlResult, DirectLink, LinkDead, UnsupportedLink
 
-#: El autoindex de nginx pone el tamaño al final de la línea, después de la fecha.
+#: nginx autoindex puts the size at the end of the line, after the date.
 _SIZE_AT_END_OF_LINE = re.compile(r"(\d+)\s*$")
 
 
@@ -20,7 +20,7 @@ class OpenDirectoryHoster:
     name = "open_directory"
 
     def __init__(self, transport: httpx.BaseTransport | None = None):
-        # Inyectable para poder testear contra páginas guardadas sin red.
+        # Injectable so it can be tested against saved pages without a network.
         self._transport = transport
 
     def can_handle(self, url: str) -> bool:
@@ -31,11 +31,11 @@ class OpenDirectoryHoster:
             response = await client.get(url)
 
         if response.status_code == 404:
-            raise LinkDead(f"no existe: {url}")
+            raise LinkDead(f"does not exist: {url}")
         if response.status_code >= 400:
-            raise UnsupportedLink(f"status {response.status_code} en {url}")
+            raise UnsupportedLink(f"status {response.status_code} at {url}")
         if "html" not in response.headers.get("Content-Type", ""):
-            raise UnsupportedLink(f"{url} no devuelve HTML")
+            raise UnsupportedLink(f"{url} does not return HTML")
 
         files: list[CrawledFile] = []
         children: list[str] = []
@@ -50,7 +50,7 @@ class OpenDirectoryHoster:
 
             absolute = urljoin(url, href)
             if not absolute.startswith(url):
-                continue  # "../" y cualquier link que salga del árbol pedido
+                continue  # "../" and any link leaving the requested tree
 
             if href.endswith("/"):
                 children.append(absolute)

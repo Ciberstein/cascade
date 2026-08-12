@@ -1,12 +1,13 @@
-"""Cuenta opcional: una forma de recuperar el token de este navegador.
+"""Optional account: a way to recover this browser's token.
 
-La cuenta **no** es una puerta de entrada. Se puede usar Cascade sin
-registrarse; registrarse sirve para una sola cosa: poder recuperar el token
-anónimo desde otro dispositivo y así ver ahí la misma lista de descargas.
+The account is **not** a front door. Cascade works without registering;
+registering buys one thing: being able to recover the anonymous token from
+another device, and so see the same download list there.
 
-Por eso no hay JWT ni sesión: el token de dueño ya es la credencial, y la
-cuenta es apenas la manera de volver a obtenerlo. `owner_id` nunca cambia al
-registrarse, así que no hay que migrar ni re-asignar nada de lo ya descargado.
+That is why there is no JWT and no session: the owner token is already the
+credential, and the account is merely the way to get it back. `owner_id` never
+changes on registration, so nothing already downloaded has to be migrated or
+reassigned.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/account", tags=["account"])
 
 @router.get("", response_model=AccountResponse)
 async def whoami(db: AsyncSession = Depends(get_db), owner: str = Depends(get_owner)):
-    """Si este navegador ya está registrado, con qué nombre."""
+    """Whether this browser is registered, and under which name."""
     result = await db.execute(select(User).where(User.owner_id == owner))
     user = result.scalar_one_or_none()
     return AccountResponse(username=user.username if user else None)
@@ -37,14 +38,14 @@ async def register(
     db: AsyncSession = Depends(get_db),
     owner: str = Depends(get_owner),
 ):
-    """Ata el token de este navegador a un usuario y contraseña.
+    """Ties this browser's token to a username and password.
 
-    Lo ya descargado sigue siendo tuyo sin mover un solo registro: el
-    `owner_id` no cambia, la cuenta solo lo vuelve recuperable.
+    What has already been downloaded stays yours without moving a single row:
+    the `owner_id` doesn't change, the account only makes it recoverable.
     """
     existing = await db.execute(select(User).where(User.owner_id == owner))
     if existing.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=409, detail="Este navegador ya tiene una cuenta")
+        raise HTTPException(status_code=409, detail="This browser already has an account")
 
     db.add(
         User(
@@ -57,24 +58,24 @@ async def register(
         await db.commit()
     except IntegrityError:
         await db.rollback()
-        raise HTTPException(status_code=409, detail="Ese nombre de usuario ya está tomado")
+        raise HTTPException(status_code=409, detail="That username is already taken")
 
     return AccountResponse(username=payload.username)
 
 
 @router.post("/login", response_model=OwnerTokenResponse)
 async def login(payload: CredentialsRequest, db: AsyncSession = Depends(get_db)):
-    """Devuelve el token de dueño de esa cuenta, para guardarlo en este navegador.
+    """Returns that account's owner token, to be stored in this browser.
 
-    No exige cabecera de dueño: es justamente el caso de un dispositivo nuevo
-    que todavía no tiene el token correcto.
+    Requires no owner header: this is precisely the case of a new device that
+    doesn't have the right token yet.
     """
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalar_one_or_none()
 
-    # Mismo mensaje para usuario inexistente y contraseña incorrecta: distinguirlos
-    # confirmaría qué nombres existen.
+    # The same message for a missing user and a wrong password: telling them
+    # apart would confirm which names exist.
     if user is None or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos")
+        raise HTTPException(status_code=401, detail="Wrong username or password")
 
     return OwnerTokenResponse(owner_token=user.owner_id)

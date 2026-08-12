@@ -43,28 +43,28 @@ class DownloadItemResponse(BaseModel):
     error_message: str | None
     hoster: str
     retry_after: dt.datetime | None
-    #: True cuando el archivo ya se liberó del servidor. La fila queda en el
-    #: historial; lo que se fue es el archivo.
+    #: True once the file has been freed from the server. The row stays in the
+    #: history; what went is the file.
     file_removed: bool
     #: Ya retirado por el usuario. El navegador no vuelve a dispararlo solo.
     retrieved: bool
-    #: "video"/"audio" mientras una calidad que vino en pistas separadas se
-    #: está bajando; None el resto del tiempo. La parte de audio no se lista:
-    #: es un medio, no una descarga que el usuario pidió. Su progreso sí cuenta
-    #: en el total del paquete, o la barra mentiría.
+    #: "video"/"audio" while a quality that arrived as separate tracks is
+    #: downloading; None the rest of the time. The audio part is not listed: it
+    #: is a means, not a download the user asked for. Its progress does count
+    #: towards the package total, or the bar would lie.
     merge_role: str | None
 
     model_config = {"from_attributes": True}
 
     @field_serializer("retry_after")
     def _utc(self, value: dt.datetime | None) -> str | None:
-        """Serializa con "Z" explícito.
+        """Serialises with an explicit "Z".
 
-        La columna guarda UTC sin tzinfo, así que por defecto saldría como
-        "2026-08-08T14:30:00". Un string ISO sin offset lo parsea JavaScript
-        como hora *local*, y la UI mostraría la espera corrida por el huso -
-        tres horas en este caso. Justo el dato cuya única función es que el
-        usuario no confunda "agendado" con "roto".
+        The column stores UTC without tzinfo, so by default it would come out as
+        "2026-08-08T14:30:00". JavaScript parses an ISO string with no offset as
+        *local* time, and the UI would show the wait shifted by the timezone -
+        three hours here. Precisely the value whose only job is to stop the user
+        confusing "scheduled" with "broken".
         """
         if value is None:
             return None
@@ -90,11 +90,11 @@ class PackageResponse(BaseModel):
 
 
 class SettingsResponse(BaseModel):
-    """Solo lo que el usuario puede decidir.
+    """Only what the user gets to decide.
 
-    La carpeta del servidor no está: el archivo se entrega al navegador y este
-    lo guarda donde guarda todo. Dónde lo deja el servidor mientras tanto es
-    una decisión de infraestructura (DOWNLOAD_ROOT), no una opción de usuario.
+    The server folder is absent: the file is handed to the browser, which saves
+    it wherever it saves everything. Where the server parks it meanwhile is an
+    infrastructure decision (DOWNLOAD_ROOT), not a user option.
     """
 
     max_concurrent_downloads: int
@@ -118,10 +118,10 @@ class CreateCrawlJobRequest(BaseModel):
     @field_validator("links")
     @classmethod
     def at_least_one_link(cls, value: str) -> str:
-        # min_length=1 dejaría pasar un textarea con solo espacios y produciría
-        # un job que no descubre nada, sin decirle al usuario por qué.
+        # min_length=1 would let a textarea of nothing but spaces through and
+        # produce a job that discovers nothing, without telling the user why.
         if not [line for line in value.splitlines() if line.strip()]:
-            raise ValueError("hace falta al menos un enlace")
+            raise ValueError("at least one link is required")
         return value
 
 
@@ -142,7 +142,7 @@ class CrawlResultResponse(BaseModel):
     hoster: str
     status: str
     error_message: str | None
-    #: Calidades entre las que elegir. Vacío para lo que no es video.
+    #: Qualities to choose from. Empty for anything that isn't video.
     variants: list[VariantResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
@@ -168,13 +168,13 @@ class PromoteRequest(BaseModel):
 
 class CredentialsRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
-    # Piso deliberadamente bajo pero no nulo: la cuenta protege una lista de
-    # descargas, no una cuenta bancaria, y un mínimo alto empuja a reutilizar.
+    # A deliberately low floor, but not zero: the account protects a download
+    # list, not a bank account, and a high minimum pushes people to reuse.
     password: str = Field(min_length=8, max_length=200)
 
 
 class AccountResponse(BaseModel):
-    """username es None cuando este navegador todavía no se registró."""
+    """username is None when this browser hasn't registered yet."""
 
     username: str | None
 

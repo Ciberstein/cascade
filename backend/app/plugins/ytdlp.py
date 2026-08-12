@@ -1,14 +1,16 @@
-"""Sitios de video, delegando en yt-dlp.
+"""Video sites, delegating to yt-dlp.
 
-Cubre ~1750 sitios de una. La alternativa era escribir un extractor por sitio,
-que es lo que hace JDownloader: no tiene sentido reescribir a mano algo que ya
-existe, se mantiene solo y se rompe cada vez que un sitio cambia su reproductor.
+Covers ~1750 sites in one go. The alternative was writing an extractor per
+site, which is what JDownloader does: there is no sense in hand-rewriting
+something that already exists, maintains itself, and breaks every time a site
+changes its player.
 
-Solo se ofrecen formatos **progresivos** por HTTP, es decir, un único archivo
-que ya trae video y audio. Los formatos DASH/HLS vienen en pistas separadas o
-troceados en segmentos, y ensamblarlos exige remuxear con ffmpeg - algo que el
-motor de Cascade, que descarga un archivo por rangos, no sabe hacer. Antes que
-entregar un video mudo o un .m3u8 inservible, se falla con un motivo claro.
+Only formats served over plain HTTP are offered - a single progressive file, or
+a video track plus an audio track that the engine merges with ffmpeg once both
+have been downloaded (see app/engine/merge.py). Segmented HLS is left out: the
+Cascade engine downloads a file by byte ranges and cannot assemble a playlist.
+Rather than hand over a silent video or a useless .m3u8, it fails with a clear
+reason.
 """
 
 import asyncio
@@ -32,8 +34,9 @@ _YDL_OPTS = {
     "quiet": True,
     "no_warnings": True,
     "noplaylist": False,
-    # Cinturón: en ningún caso yt-dlp debe escribir en disco. Quien descarga
-    # es el motor de chunks, que es el que sabe reanudar y limitar velocidad.
+    # Belt and braces: under no circumstances should yt-dlp write to disk. The
+    # chunk engine does the downloading - it is the one that knows how to
+    # resume and to throttle.
     "skip_download": True,
 }
 
@@ -46,11 +49,11 @@ class YtDlpHoster:
         self._extract = extract
 
     def can_handle(self, url: str) -> bool:
-        """True si algún extractor específico reconoce la URL.
+        """True if some specific extractor recognises the URL.
 
-        Se excluye el extractor genérico a propósito: acepta cualquier cosa y,
-        si contara, este plugin se quedaría con enlaces directos y carpetas que
-        `direct` y `open_directory` manejan mejor.
+        The generic extractor is excluded on purpose: it accepts anything and,
+        if it counted, this plugin would swallow plain links and folders that
+        `direct` and `open_directory` handle better.
         """
         if self._extract is not None:
             return True  # instancia de test: el guion decide
@@ -60,9 +63,9 @@ class YtDlpHoster:
         info = await self._info(url, flat=True)
 
         if info.get("_type") == "playlist":
-            # Cada entrada es su propio archivo: el motor descarga archivos,
-            # no colecciones. Sin tamaño, porque averiguarlo exigiría resolver
-            # cada video de la lista y eso puede ser un centenar de requests.
+            # Each entry is its own file: the engine downloads files, not
+            # collections. No size, because finding out would mean resolving
+            # every video in the list - potentially a hundred requests.
             return CrawlResult(
                 files=[
                     CrawledFile(
@@ -91,53 +94,53 @@ class YtDlpHoster:
         formats = info.get("formats") or []
 
         if format_id is not None:
-            # La calidad la eligió el usuario: se pide esa y no otra. Se busca
-            # por id porque las URLs caducan y no se pueden guardar.
+            # The user chose the quality: ask for that one and no other. It
+            # is looked up by id because URLs expire and cannot be stored.
             fmt = next((f for f in formats if str(f.get("format_id")) == format_id), None)
             if fmt is None:
                 raise PluginError(
-                    f"el formato {format_id} ya no está disponible para este video"
+                    f"format {format_id} is no longer available for this video"
                 )
         else:
             fmt = _pick_progressive(formats)
 
         if fmt is None:
             raise PluginError(
-                "este video no ofrece ninguna calidad descargable como archivo único"
+                "this video offers no quality downloadable as a single file"
             )
 
-        # http_headers importa de verdad: los CDN de video suelen exigir el
-        # Referer y el User-Agent con los que se pidió la página, y sin ellos
-        # devuelven 403 aunque la URL sea correcta.
+        # http_headers genuinely matters: video CDNs usually demand the
+        # Referer and User-Agent the page was requested with, and without them
+        # they answer 403 even when the URL is right.
         return DirectLink(url=fmt["url"], headers=dict(fmt.get("http_headers") or {}))
 
     async def _info(self, url: str, flat: bool) -> dict[str, Any]:
-        # Canonicalizado acá, en un solo punto: crawl y resolve tienen que
-        # coincidir, o el crawl encontraría el video y la descarga fallaría.
+        # Canonicalised here, at a single point: crawl and resolve have to
+        # agree, or the crawl would find the video and the download would fail.
         url = canonical_url(url) if self._extract is None else url
 
         opts = dict(_YDL_OPTS)
         if flat:
-            # Listar una playlist sin resolver cada video: la bandeja necesita
-            # los títulos, no las URLs finales, que además caducan.
+            # List a playlist without resolving each video: the tray needs the
+            # titles, not the final URLs, which expire anyway.
             opts["extract_flat"] = "in_playlist"
 
-        # La traducción de errores envuelve también al extractor inyectado: es
-        # justamente la parte que hay que poder probar, y dejarla fuera del
-        # camino de test la volvería letra muerta.
+        # The error translation wraps the injected extractor too: that is
+        # precisely the part that has to be testable, and leaving it outside the
+        # test path would make it dead letter.
         try:
             if self._extract is not None:
                 return self._extract(url, flat)
-            # yt-dlp es síncrono y hace I/O de red. Corriéndolo en el loop
-            # bloquearía todo el proceso: el scheduler, el WebSocket de
-            # progreso y la API entera, durante segundos por video.
+            # yt-dlp is synchronous and does network I/O. Running it on the
+            # loop would block the whole process: the scheduler, the progress
+            # WebSocket and the entire API, for seconds per video.
             return await asyncio.to_thread(_extract_sync, url, opts)
         except Exception as exc:  # noqa: BLE001 - se traduce al vocabulario del contrato
             raise _translate(exc, url) from exc
 
 
 def has_extractor(url: str) -> bool:
-    """Si algún extractor específico de yt-dlp reconoce esta URL."""
+    """Whether some specific yt-dlp extractor recognises this URL."""
     try:
         from yt_dlp.extractor import gen_extractor_classes
 
@@ -148,17 +151,17 @@ def has_extractor(url: str) -> bool:
 
 
 def canonical_url(url: str) -> str:
-    """Reemplaza el TLD por .com si eso hace que un extractor reconozca la URL.
+    """Swaps the TLD for .com when that makes an extractor recognise the URL.
 
-    Muchos sitios tienen espejos por país - xnxx.es junto a xnxx.com - que
-    sirven el mismo contenido con la misma estructura de URL, pero yt-dlp
-    registra solo el dominio canónico. Sin esto, pegar el enlace del espejo
-    falla aunque el video sea perfectamente descargable.
+    Many sites run country mirrors - xnxx.es alongside xnxx.com - serving the
+    same content with the same URL structure, but yt-dlp only registers the
+    canonical domain. Without this, pasting the mirror's link fails even though
+    the video is perfectly downloadable.
 
-    El cambio es deliberadamente conservador: solo se aplica cuando la URL
-    original NO matchea y la reescrita SÍ. Eso lo vuelve auto-limitado - no
-    puede convertir una URL en cualquier otra cosa, porque el resultado tiene
-    que ser algo que yt-dlp ya sepa manejar.
+    The change is deliberately conservative: it only applies when the original
+    URL does NOT match and the rewritten one does. That makes it self-limiting -
+    it cannot turn a URL into just anything, because the result has to be
+    something yt-dlp already knows how to handle.
     """
     if has_extractor(url):
         return url
@@ -209,17 +212,17 @@ def _best_size(info: dict[str, Any]) -> int | None:
 
 
 def _pick_progressive(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """El mejor formato que sea un solo archivo HTTP con video y audio.
+    """The best format that is a single HTTP file carrying video and audio.
 
-    Ojo con el vocabulario de yt-dlp, que distingue dos cosas que es fácil
-    confundir: la cadena "none" significa que esa pista NO está, mientras que
-    None significa que no se sabe. Facebook, por ejemplo, publica sus formatos
-    progresivos ("sd" y "hd") sin declarar códecs: tratarlos como si les
-    faltara el audio descartaría justo los únicos que sirven.
+    Mind yt-dlp's vocabulary, which distinguishes two things that are easy to
+    confuse: the string "none" means that track is NOT there, while None means
+    it is unknown. Facebook, for instance, publishes its progressive formats
+    ("sd" and "hd") without declaring codecs: treating them as missing audio
+    would discard precisely the only usable ones.
 
-    Por eso van en dos tandas: primero los que declaran ambas pistas, y solo
-    si no hay ninguno, los de códecs desconocidos. Lo explícitamente ausente
-    ("none") nunca entra.
+    Hence two passes: first those declaring both tracks, and only if there are
+    none, those with unknown codecs. What is explicitly absent ("none") never
+    qualifies.
     """
     http = [
         (i, f)
@@ -237,9 +240,9 @@ def _pick_progressive(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
     for known in (True, False):
         tier = [(i, f) for i, f in http if usable(f, known=known)]
         if tier:
-            # El índice desempata: yt-dlp devuelve los formatos de peor a
-            # mejor, así que ante altura y bitrate iguales - el caso de "sd" y
-            # "hd", que no declaran ninguna de las dos - gana el último.
+            # The index breaks ties: yt-dlp returns formats worst to best, so
+            # with equal height and bitrate - the case of "sd" and "hd", which
+            # declare neither - the last one wins.
             return max(tier, key=lambda pair: (pair[1].get("height") or 0, pair[1].get("tbr") or 0, pair[0]))[1]
     return None
 
@@ -247,22 +250,22 @@ def _pick_progressive(formats: list[dict[str, Any]]) -> dict[str, Any] | None:
 PLUGIN = YtDlpHoster()
 
 
-#: Las alturas que se ofrecen. Listar las 33 variantes que publica YouTube
-#: sería una pared de opciones donde casi todas son indistinguibles.
+#: The heights on offer. Listing the 33 variants YouTube publishes would be a
+#: wall of options where almost all are indistinguishable.
 _OFFERED_HEIGHTS = (2160, 1440, 1080, 720, 480, 360, 240)
 
 
 def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
     """Las calidades entre las que el usuario puede elegir, de mejor a peor.
 
-    Incluye las que vienen en pistas separadas: se emparejan con el mejor audio
-    suelto y el motor las une al terminar. Sin eso, en YouTube la única opción
-    sería 360p - la única progresiva de las 33 que publica - para un video que
-    existe en 4K.
+    Includes those arriving as separate tracks: they are paired with the best
+    loose audio and the engine merges them at the end. Without that, YouTube's
+    only option would be 360p - the single progressive one of the 33 it
+    publishes - for a video that exists in 4K.
 
-    Ante dos formatos de la misma altura gana el progresivo: unir cuesta una
-    descarga extra y un paso de ffmpeg, así que solo se recurre a eso cuando no
-    hay un archivo único de esa calidad.
+    Between two formats of the same height the progressive one wins: merging
+    costs an extra download and an ffmpeg pass, so it is only used when there
+    is no single file at that quality.
     """
     http = [
         f for f in formats
@@ -273,15 +276,15 @@ def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
     candidates: dict[object, Variant] = {}
     for fmt in http:
         if fmt.get("vcodec") == "none":
-            continue  # audio suelto: no es una calidad elegible por sí misma
+            continue  # loose audio: not a quality anyone can pick on its own
 
-        # "none" es que la pista no está; None es que no se sabe. Tratar el
-        # desconocido como ausente marcaría para unir formatos que ya traen
-        # audio - los "sd"/"hd" de Facebook son justamente así.
+        # "none" means the track is absent; None means unknown. Treating the
+        # unknown as absent would mark for merging formats that already carry
+        # audio - Facebook's "sd"/"hd" are exactly that.
         needs_audio = fmt.get("acodec") == "none"
         audio = _audio_for(fmt, audios) if needs_audio else None
         if needs_audio and audio is None:
-            continue  # no hay audio compatible con qué completarlo
+            continue  # no compatible audio to complete it with
 
         audio_format = str(audio["format_id"]) if audio else None
 
@@ -307,25 +310,26 @@ def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
         if previo is None or (previo.needs_merge and not variant.needs_merge):
             candidates[key] = variant
 
-    con_altura = [candidates[h] for h in _OFFERED_HEIGHTS if h in candidates]
-    # Los sin altura declarada (Facebook publica "sd"/"hd" así) van después, en
-    # el orden inverso al de yt-dlp, que los da de peor a mejor.
-    sin_altura = [v for k, v in candidates.items() if not isinstance(k, int)]
-    return con_altura + list(reversed(sin_altura))
+    with_height = [candidates[h] for h in _OFFERED_HEIGHTS if h in candidates]
+    # Those with no declared height (Facebook publishes "sd"/"hd" that way) go
+    # afterwards, in reverse of yt-dlp's order, which runs worst to best.
+    without_height = [v for k, v in candidates.items() if not isinstance(k, int)]
+    return with_height + list(reversed(without_height))
 
 
-#: Qué audio puede convivir con qué video en un mismo contenedor. Meter AAC en
-#: un WebM, o VP9 en un MP4, no es una preferencia: el contenedor lo rechaza y
-#: ffmpeg no escribe nada.
+#: Which audio can share a container with which video. Putting AAC in a WebM,
+#: or VP9 in an MP4, is not a preference: the container rejects it and ffmpeg
+#: writes nothing.
 _COMPATIBLE_AUDIO_EXT = {"webm": {"webm", "opus"}, "mp4": {"m4a", "mp4"}, "m4a": {"m4a", "mp4"}}
 
 
 def _audio_for(video: dict[str, Any], audios: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """El mejor audio que el contenedor del video acepte.
+    """The best audio the video's container will accept.
 
-    Elegir por bitrate a secas rompía la unión: para un video VP9 tomaba el
-    AAC, y "Only VP8 or VP9 or AV1 video and Vorbis or Opus audio are supported
-    for WebM" hacía fallar a ffmpeg después de bajar las dos pistas enteras.
+    Choosing on bitrate alone broke the merge: for a VP9 video it picked the
+    AAC, and "Only VP8 or VP9 or AV1 video and Vorbis or Opus audio are
+    supported for WebM" failed ffmpeg after both tracks had been downloaded in
+    full.
     """
     allowed = _COMPATIBLE_AUDIO_EXT.get(str(video.get("ext") or "").lower())
     usable = [a for a in audios if allowed is None or str(a.get("ext") or "").lower() in allowed]

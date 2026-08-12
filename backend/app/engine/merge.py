@@ -1,11 +1,11 @@
-"""Une las pistas de video y audio de una calidad que vino separada.
+"""Merges the video and audio tracks of a quality that arrived separated.
 
-Los sitios grandes sirven las calidades altas en pistas sueltas: YouTube
-publica 33 formatos y solo el de 360p trae las dos juntas. Sin este paso,
-elegir calidad no tendría nada que elegir por encima de 360p.
+Large sites serve high qualities as loose tracks: YouTube publishes 33 formats
+and only the 360p one carries both together. Without this step, choosing a
+quality would have nothing to choose above 360p.
 
-Se copian los streams sin recodificar (`-c copy`), así que unir un video de
-1 GB tarda segundos y no consume CPU: solo se reempaqueta.
+The streams are copied without re-encoding (`-c copy`), so merging a 1 GB video
+takes seconds and costs no CPU: it is only repackaged.
 """
 
 import asyncio
@@ -19,22 +19,22 @@ from app.models import DownloadItem, Package
 
 logger = logging.getLogger(__name__)
 
-#: Un remux no debería tardar más que esto ni para un archivo grande. El tope
-#: existe para que un ffmpeg colgado no deje el item en el limbo para siempre.
+#: A remux shouldn't take longer than this even for a large file. The ceiling
+#: exists so a hung ffmpeg doesn't leave the item in limbo forever.
 MERGE_TIMEOUT_SECONDS = 900
 
 
 def part_suffix(role: str | None) -> str:
-    """Sufijo del archivo de cada parte mientras se descarga.
+    """Filename suffix for each part while it downloads.
 
-    Las dos partes viven en la misma carpeta que el resultado, así que sin
-    distinguirlas se pisarían entre sí.
+    Both parts live in the same folder as the result, so without distinguishing
+    them they would overwrite each other.
     """
     return f".part-{role}" if role else ""
 
 
 async def merge_ready_groups(db: AsyncSession) -> int:
-    """Une los grupos cuyas dos partes ya terminaron. Devuelve cuántos unió."""
+    """Merges groups whose two parts have finished. Returns how many."""
     result = await db.execute(
         select(DownloadItem).where(
             DownloadItem.merge_group.is_not(None),
@@ -56,7 +56,7 @@ async def merge_ready_groups(db: AsyncSession) -> int:
         ).scalar_one_or_none()
 
         if audio is None or audio.status != "completed":
-            continue  # todavía falta una parte
+            continue  # one part is still missing
 
         package = (
             await db.execute(select(Package).where(Package.id == video.package_id))
@@ -64,10 +64,10 @@ async def merge_ready_groups(db: AsyncSession) -> int:
 
         try:
             await _merge(package.target_dir, video, audio)
-        except Exception as exc:  # noqa: BLE001 - un grupo roto no frena a los demás
-            logger.exception("no se pudo unir %s", video.filename)
+        except Exception as exc:  # noqa: BLE001 - a broken group doesn't stop the others
+            logger.exception("could not merge %s", video.filename)
             video.status = "error"
-            video.error_message = f"no se pudieron unir las pistas: {exc}"
+            video.error_message = f"could not merge the tracks: {exc}"
             await db.commit()
             continue
 
@@ -93,8 +93,8 @@ async def _merge(target_dir: str, video: DownloadItem, audio: DownloadItem) -> N
         "ffmpeg", "-y",
         "-i", video_path,
         "-i", audio_path,
-        # Sin recodificar: reempaquetar es cuestión de segundos y no toca la
-        # calidad. Recodificar tardaría horas y la empeoraría.
+        # No re-encoding: repackaging takes seconds and doesn't touch the
+        # quality. Re-encoding would take hours and make it worse.
         "-c", "copy",
         "-map", "0:v:0", "-map", "1:a:0",
         final_path,
@@ -105,12 +105,13 @@ async def _merge(target_dir: str, video: DownloadItem, audio: DownloadItem) -> N
         _, stderr = await asyncio.wait_for(process.communicate(), timeout=MERGE_TIMEOUT_SECONDS)
     except TimeoutError:
         process.kill()
-        raise RuntimeError("ffmpeg tardó demasiado")
+        raise RuntimeError("ffmpeg took too long")
 
     if process.returncode != 0:
         raise RuntimeError(stderr.decode(errors="replace").strip()[-300:])
 
-    # Las partes ya cumplieron: dejarlas duplicaría en disco cada video unido.
+    # The parts have served their purpose: keeping them would double every
+    # merged video on disk.
     for path in (video_path, audio_path):
         try:
             os.remove(path)

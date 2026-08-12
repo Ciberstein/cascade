@@ -61,12 +61,12 @@ async def download_chunk(
 
     for attempt in range(max_retries):
         try:
-            # Mismo motivo que en el probe: sin seguir redirecciones, un enlace
-            # que apunta a un CDN falla. El Range viaja en el request y httpx lo
-            # reenvía al destino.
+            # Same reason as in the probe: without following redirects, a
+            # link pointing at a CDN fails. The Range travels in the request
+            # and httpx forwards it to the destination.
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                # El Range va último a propósito: lo calcula el motor de chunks,
-                # y que un plugin lo pise corrompería el archivo en silencio.
+                # Range goes last on purpose: the chunk engine computes it,
+                # and a plugin overriding it would silently corrupt the file.
                 request_headers = {**(headers or {}), "Range": f"bytes={range_start}-{end}"}
                 async with client.stream("GET", url, headers=request_headers) as response:
                     if response.status_code not in (200, 206):

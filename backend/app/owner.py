@@ -1,26 +1,24 @@
-"""Identidad anónima por navegador.
+"""Anonymous per-browser identity.
 
-No hay login: quien llega puede usar el servicio de inmediato. Para saber qué
-descargas mostrarle, el navegador genera un token opaco, lo guarda en
-localStorage y lo manda en cada request.
+There is no login: whoever arrives can use the service straight away. To know
+which downloads to show them, the browser generates an opaque token, keeps it
+in localStorage and sends it on every request.
 
-Ese token **es** la identidad: quien lo tenga ve ese historial. Por eso se
-exige longitud suficiente para que no se pueda adivinar, y por eso nunca se
-loguea. Cuando exista el registro de cuentas, una cuenta será simplemente un
-token que además se puede recuperar desde otro dispositivo.
+That token *is* the identity: whoever holds it sees that history. Hence the
+minimum length, so it cannot be guessed, and hence it is never logged. An
+account is simply a token that can also be recovered from another device.
 """
 
 from fastapi import Cookie, Header, HTTPException, status
 
 OWNER_HEADER = "X-Cascade-Owner"
-#: Mismo token, en cookie. Hace falta porque una descarga es una navegación
-#: normal del navegador - un <a download> no puede mandar cabeceras propias -
-#: y sin esto el endpoint que entrega el archivo respondía 400.
+#: The same token, in a cookie. Needed because a download is an ordinary
+#: browser navigation - an <a download> cannot send headers of its own - and
+#: without this the endpoint that serves the file answered 400.
 OWNER_COOKIE = "cascade_owner"
 
-#: Un uuid4 en hexadecimal son 32 caracteres. Se exige eso como piso para que
-#: el token no sea adivinable: sin login, adivinarlo es acceder al historial
-#: ajeno.
+#: A uuid4 in hex is 32 characters. That is the floor, so the token cannot be
+#: guessed: with no login, guessing it means reading someone else's history.
 MIN_TOKEN_LENGTH = 32
 MAX_TOKEN_LENGTH = 128
 
@@ -29,19 +27,19 @@ def _validate(token: str | None) -> str:
     if not token:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"falta la cabecera {OWNER_HEADER}",
+            detail=f"missing {OWNER_HEADER} header",
         )
     if not (MIN_TOKEN_LENGTH <= len(token) <= MAX_TOKEN_LENGTH):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{OWNER_HEADER} debe tener entre {MIN_TOKEN_LENGTH} y {MAX_TOKEN_LENGTH} caracteres",
+            detail=f"{OWNER_HEADER} must be between {MIN_TOKEN_LENGTH} and {MAX_TOKEN_LENGTH} characters",
         )
     if not token.isalnum():
-        # Acotado a alfanumérico para que no entre nada raro en consultas ni
-        # en logs; el cliente genera hexadecimal.
+        # Restricted to alphanumerics so nothing strange reaches queries or
+        # logs; the client generates hexadecimal.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{OWNER_HEADER} solo admite caracteres alfanuméricos",
+            detail=f"{OWNER_HEADER} accepts alphanumeric characters only",
         )
     return token
 
@@ -50,20 +48,20 @@ async def get_owner(
     x_cascade_owner: str | None = Header(default=None),
     cascade_owner: str | None = Cookie(default=None),
 ) -> str:
-    """Dueño de los datos de esta request.
+    """Who owns the data in this request.
 
-    La cabecera es lo normal (la pone el cliente de API). La cookie cubre las
-    navegaciones del navegador, que no pueden llevar cabeceras propias: la
-    descarga de un archivo es exactamente ese caso.
+    The header is the normal path (the API client sets it). The cookie covers
+    browser navigations, which cannot carry headers of their own: downloading a
+    file is exactly that case.
     """
     return _validate(x_cascade_owner or cascade_owner)
 
 
 def owner_from_query(token: str | None) -> str | None:
-    """Variante para el WebSocket, que no puede mandar cabeceras propias.
+    """Variant for the WebSocket, which cannot send headers of its own.
 
-    Devuelve None en vez de lanzar: la ruta del socket cierra la conexión con
-    su propio código en lugar de responder un HTTP.
+    Returns None instead of raising: the socket route closes the connection
+    with its own code rather than answering with HTTP.
     """
     try:
         return _validate(token)

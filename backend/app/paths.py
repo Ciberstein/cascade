@@ -1,37 +1,37 @@
-"""Contención de rutas para nombres de archivo de origen remoto.
+"""Path containment for remotely-sourced filenames.
 
-Un `filename` puede venir del texto de un enlace en el HTML de un sitio ajeno.
-Sin sanear, `os.path.join(package_dir, filename)` deja escribir en cualquier
-parte del contenedor: `os.path.join` descarta el prefijo entero si el nombre
-es absoluto, y `..` escapa hacia arriba. Como el motor después crea el
-directorio y escribe bytes también controlados por el sitio, eso alcanza para
-sobrescribir código o tareas programadas.
+A `filename` can come from the text of a link in someone else's HTML. Left
+unsanitised, `os.path.join(package_dir, filename)` allows writing anywhere in
+the container: `os.path.join` discards the whole prefix when the name is
+absolute, and `..` escapes upwards. Since the engine then creates the directory
+and writes bytes that the site also controls, that is enough to overwrite code
+or scheduled jobs.
 """
 
 import os
 import re
 
-#: Todo lo que el sistema de archivos trata como separador o es ilegal en
-#: Windows. Se reemplaza en vez de rechazar: un nombre raro no debería
-#: impedir la descarga, solo dejar de ser peligroso.
+#: Everything the filesystem treats as a separator, plus what is illegal on
+#: Windows. Replaced rather than rejected: an odd name shouldn't block the
+#: download, only stop being dangerous.
 _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 _MAX_FILENAME = 200
 
-#: Más largo que esto no es una extensión, es un título con puntos.
+#: Longer than this is not an extension, it is a title with dots in it.
 _MAX_EXTENSION = 12
 
 
 def safe_filename(name: str, fallback: str = "download") -> str:
-    """Reduce `name` a un nombre de archivo que no puede salir de su carpeta.
+    """Reduces `name` to a filename that cannot leave its own folder.
 
-    Se queda con el último segmento y neutraliza el resto: "../../etc/passwd"
-    queda en "passwd", "/etc/cron.d/x" en "x". Los nombres que después de
-    limpiar no dicen nada ("", ".", "..") caen en `fallback`.
+    Keeps the last segment and neutralises the rest: "../../etc/passwd" becomes
+    "passwd", "/etc/cron.d/x" becomes "x". Names that say nothing once cleaned
+    ("", ".", "..") fall back to `fallback`.
     """
-    # Se parte por ambos separadores a mano: en Linux os.path.basename no
-    # trata "\" como separador, así que un nombre con "\" pasaría entero y
-    # volvería a ser peligroso al montarse el volumen en Windows.
+    # Split on both separators by hand: on Linux os.path.basename does not
+    # treat "\" as a separator, so a name containing one would pass through
+    # whole and turn dangerous again once the volume is mounted on Windows.
     last = re.split(r"[/\\]", name)[-1]
     cleaned = _UNSAFE.sub("_", last).strip().strip(".")
 
@@ -41,18 +41,18 @@ def safe_filename(name: str, fallback: str = "download") -> str:
 
 
 def _truncate_keeping_extension(name: str) -> str:
-    """Recorta por el medio, no por el final, para no perder la extensión.
+    """Trims the middle, not the end, so the extension survives.
 
-    Los títulos de video pasan de largo el límite con facilidad, y cortar a
-    ciegas se lleva puesto el ".mp4": el archivo queda sin extensión y el
-    sistema operativo no sabe con qué abrirlo.
+    Video titles overrun the limit easily, and cutting blindly takes the ".mp4"
+    with it: the file ends up with no extension and the operating system has no
+    idea what to open it with.
     """
     if len(name) <= _MAX_FILENAME:
         return name
 
     stem, dot, ext = name.rpartition(".")
-    # Sin punto, o con un "sufijo" tan largo que no puede ser una extensión
-    # (un título con puntos en el medio), se recorta y ya.
+    # With no dot, or with a "suffix" too long to be an extension (a title with
+    # dots in the middle), just trim.
     if not dot or not ext or len(ext) > _MAX_EXTENSION:
         return name[:_MAX_FILENAME]
 
@@ -61,10 +61,10 @@ def _truncate_keeping_extension(name: str) -> str:
 
 
 def unique_name(name: str, taken: set[str]) -> str:
-    """Agrega " (2)", " (3)"... si el nombre ya está usado, como un navegador.
+    """Appends " (2)", " (3)"... when the name is taken, like a browser does.
 
-    Respeta la extensión, que es lo que hace que el sufijo quede en
-    "video (2).mp4" y no en "video.mp4 (2)".
+    Respects the extension, which is what puts the suffix in "video (2).mp4"
+    rather than "video.mp4 (2)".
     """
     if name not in taken:
         taken.add(name)
@@ -79,19 +79,19 @@ def unique_name(name: str, taken: set[str]) -> str:
         if candidate not in taken:
             taken.add(candidate)
             return candidate
-    raise ValueError(f"demasiados nombres repetidos como {name!r}")
+    raise ValueError(f"too many repeated names like {name!r}")
 
 
 def ensure_within(base_dir: str, path: str) -> str:
-    """Devuelve `path` si cae dentro de `base_dir`; si no, lanza ValueError.
+    """Returns `path` if it falls inside `base_dir`; raises ValueError if not.
 
-    Segunda barrera, deliberadamente redundante con safe_filename: esta se
-    aplica justo antes de abrir el archivo, así que cubre también cualquier
-    ruta que llegue por un camino que todavía no exista o que se agregue más
-    adelante sin recordar sanear.
+    A second barrier, deliberately redundant with safe_filename: this one runs
+    just before opening the file, so it also covers any path arriving through a
+    route that doesn't exist yet, or one added later without remembering to
+    sanitise.
     """
     base = os.path.realpath(base_dir)
     target = os.path.realpath(path)
     if base != target and not target.startswith(base + os.sep):
-        raise ValueError(f"la ruta de destino {path!r} queda fuera de {base_dir!r}")
+        raise ValueError(f"target path {path!r} falls outside {base_dir!r}")
     return path

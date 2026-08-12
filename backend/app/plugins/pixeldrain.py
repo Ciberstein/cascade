@@ -1,7 +1,7 @@
-"""Pixeldrain, vía su API JSON pública.
+"""Pixeldrain, through its public JSON API.
 
-Sirve de plantilla para hosters con API documentada: no hay HTML que parsear,
-así que no se rompe cuando el sitio cambia su maquetado.
+A template for hosters with a documented API: there is no HTML to parse, so it
+doesn't break when the site changes its markup.
 """
 
 import re
@@ -43,7 +43,7 @@ class PixeldrainHoster:
 
         file_match = _FILE_URL.match(url)
         if file_match is None:
-            raise PluginError(f"URL de pixeldrain no reconocida: {url}")
+            raise PluginError(f"unrecognised pixeldrain URL: {url}")
 
         body = await self._get(f"{_BASE}/api/file/{file_match.group('id')}/info", url)
         return CrawlResult(
@@ -59,8 +59,8 @@ class PixeldrainHoster:
     async def resolve(self, url: str, format_id: str | None = None) -> DirectLink:
         match = _FILE_URL.match(url)
         if match is None:
-            raise PluginError(f"no se puede descargar directamente {url}")
-        # /u/ es la página HTML; el binario vive en el endpoint de la API.
+            raise PluginError(f"{url} cannot be downloaded directly")
+        # /u/ is the HTML page; the binary lives on the API endpoint.
         return DirectLink(url=f"{_BASE}/api/file/{match.group('id')}?download")
 
     async def _get(self, api_url: str, original_url: str) -> dict:
@@ -68,9 +68,9 @@ class PixeldrainHoster:
             response = await client.get(api_url)
 
         if response.status_code in (404, 410):
-            raise LinkDead(f"ya no existe: {original_url}")
+            raise LinkDead(f"no longer exists: {original_url}")
         if response.status_code >= 400:
-            raise PluginError(f"pixeldrain devolvió {response.status_code} para {original_url}")
+            raise PluginError(f"pixeldrain returned {response.status_code} for {original_url}")
         return response.json()
 
 

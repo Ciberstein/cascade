@@ -1,17 +1,18 @@
-"""El servidor es un lugar de paso, no un depósito.
+"""The server is a place to pass through, not a warehouse.
 
-Cascade tiene que sostener los bytes mientras descarga - de eso viven la cola,
-la reanudación y los chunks en paralelo - pero no tiene por qué quedárselos
-después. Este barrido borra el archivo una vez que cumplió su función y deja la
-fila en el historial: lo que se va es el archivo, no el registro.
+Cascade has to hold the bytes while downloading - the queue, resuming and
+parallel chunks all depend on it - but it has no reason to keep them
+afterwards. This sweep deletes the file once it has served its purpose and
+leaves the row in the history: what goes is the file, not the record.
 
-Dos reglas, por dos motivos distintos:
+Two rules, for two different reasons:
 
-- Retirado hace más de `retrieval_grace_minutes`: ya está en el equipo del
-  usuario. El margen no es cero a propósito - si la descarga del navegador se
-  corta al 90%, borrarlo al instante lo dejaría sin nada.
-- Terminado hace más de `max_retention_hours`, retirado o no: sin este tope, lo
-  que nadie va a buscar se queda para siempre y el disco vuelve a crecer.
+- Retrieved more than `retrieval_grace_minutes` ago: it is already on the
+  user's machine. The margin is deliberately not zero - if the browser's
+  download breaks at 90%, deleting instantly would leave them with nothing.
+- Finished more than `max_retention_hours` ago, retrieved or not: without that
+  ceiling, whatever nobody comes back for stays forever and the disk grows
+  again.
 """
 
 import datetime as dt
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 async def sweep(db: AsyncSession, grace_minutes: int, max_retention_hours: int) -> int:
-    """Borra los archivos que ya cumplieron y devuelve cuántos liberó."""
+    """Deletes the files that have served their purpose; returns how many."""
     now = dt.datetime.utcnow()
     retrieved_before = now - dt.timedelta(minutes=grace_minutes)
     finished_before = now - dt.timedelta(hours=max_retention_hours)
@@ -48,8 +49,8 @@ async def sweep(db: AsyncSession, grace_minutes: int, max_retention_hours: int) 
     if not items:
         return 0
 
-    # target_dir se lee acá y no dentro del bucle sobre item.package: tocar una
-    # relación no cargada dispararía una consulta perezosa por item.
+    # target_dir is read here rather than inside the loop over item.package:
+    # touching an unloaded relationship would fire a lazy query per item.
     dirs = dict(
         (await db.execute(select(Package.id, Package.target_dir))).all()
     )
@@ -61,11 +62,11 @@ async def sweep(db: AsyncSession, grace_minutes: int, max_retention_hours: int) 
             os.remove(path)
             freed += 1
         except FileNotFoundError:
-            pass  # ya no estaba; igual se marca para no volver a intentarlo
+            pass  # already gone; still marked so it isn't retried forever
         except OSError:
-            # Un archivo que no se puede borrar (permisos, en uso) no puede
-            # frenar al resto ni al loop que llama a esto.
-            logger.exception("no se pudo liberar %s", path)
+            # A file that cannot be deleted (permissions, still in use) must
+            # not stop the rest, nor the loop that calls this.
+            logger.exception("could not free %s", path)
             continue
         item.file_removed_at = now
 

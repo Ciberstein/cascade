@@ -1,4 +1,4 @@
-"""El contrato que todo hoster implementa. Sin I/O: solo tipos y errores."""
+"""The contract every hoster implements. No I/O: types and errors only."""
 
 import datetime as dt
 from dataclasses import dataclass, field
@@ -7,11 +7,11 @@ from typing import Protocol, runtime_checkable
 
 @dataclass(frozen=True)
 class Variant:
-    """Una calidad concreta en la que se puede bajar un video.
+    """One concrete quality a video can be downloaded in.
 
-    `video_format` y `audio_format` son identificadores del hoster, no URLs:
-    las URLs caducan y se piden recién al descargar. Cuando `audio_format` no
-    es None, esa calidad viene en pistas separadas y hay que unirlas.
+    `video_format` and `audio_format` are the hoster's identifiers, not URLs:
+    URLs expire and are requested only at download time. When `audio_format` is
+    not None, that quality comes as separate tracks and they have to be merged.
     """
 
     id: str
@@ -20,9 +20,9 @@ class Variant:
     audio_format: str | None = None
     height: int | None = None
     size: int | None = None
-    #: Contenedor del resultado ("mp4", "webm"). El nombre del archivo tiene
-    #: que terminar en esta extensión: un .webm con audio AAC adentro no se
-    #: puede escribir, y un .mp4 con VP9 tampoco.
+    #: Container of the result ("mp4", "webm"). The filename has to end in this
+    #: extension: a .webm with AAC audio inside cannot be written, and neither
+    #: can an .mp4 with VP9.
     ext: str | None = None
 
     @property
@@ -32,71 +32,71 @@ class Variant:
 
 @dataclass(frozen=True)
 class CrawledFile:
-    """Un archivo concreto descubierto detrás de un link."""
+    """One concrete file discovered behind a link."""
 
     url: str
     filename: str
-    #: None cuando el hoster no informa tamaño hasta el momento de bajar.
+    #: None when the hoster doesn't report a size until download time.
     size: int | None = None
     alive: bool = True
-    #: Calidades entre las que el usuario puede elegir. Vacío para lo que no
-    #: es video: un .zip no tiene resoluciones.
+    #: Qualities the user can choose from. Empty for anything that isn't video:
+    #: a .zip has no resolutions.
     variants: list["Variant"] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class CrawlResult:
-    """Lo que hay detrás de un link: archivos, y links que aún hay que abrir."""
+    """What sits behind a link: files, and links still to be opened."""
 
     files: list[CrawledFile] = field(default_factory=list)
-    #: Links descubiertos que a su vez deben crawlearse (carpeta dentro de carpeta).
+    #: Discovered links that must themselves be crawled (folder within folder).
     children: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class DirectLink:
-    """URL descargable ya materializada, válida por poco tiempo."""
+    """A materialised downloadable URL, valid for a short while."""
 
     url: str
-    #: Cookies, referer o lo que esa URL exija para no devolver 403.
+    #: Cookies, referer, or whatever that URL demands to avoid a 403.
     headers: dict[str, str] = field(default_factory=dict)
 
 
 class PluginError(Exception):
-    """Raíz de todo fallo de plugin.
+    """Root of every plugin failure.
 
-    Cada call site captura esta clase una sola vez. Si las variantes de abajo
-    no compartieran raíz, agregar una nueva exigiría tocar cada call site y,
-    mientras tanto, escaparía al loop.
+    Each call site catches this class once. If the variants below didn't share
+    a root, adding a new one would mean touching every call site and, until
+    then, it would escape into the loop.
     """
 
 
 class LinkDead(PluginError):
-    """El archivo ya no existe. No se reintenta: no va a revivir."""
+    """The file no longer exists. Not retried: it isn't coming back."""
 
 
 class UnsupportedLink(PluginError):
-    """Este plugin no sabe manejar esta URL; que siga probando el registro."""
+    """This plugin can't handle this URL; let the registry keep trying."""
 
 
 class RateLimited(PluginError):
-    """El hoster pide esperar. No es un fallo, es trabajo agendado."""
+    """The hoster asks us to wait. Not a failure, scheduled work."""
 
-    #: Techo sobre lo que un plugin puede pedir esperar. Un valor absurdo
-    #: (un bug de fecha, el año 9999) dejaría el item parado para siempre y no
-    #: hay endpoint para reencolarlo a mano.
+    #: Ceiling on what a plugin may ask us to wait. An absurd value (a date bug,
+    #: the year 9999) would park the item forever, and there is no endpoint to
+    #: requeue it by hand.
     MAX_WAIT = dt.timedelta(hours=6)
 
     def __init__(self, retry_at: dt.datetime, message: str = "rate limited"):
         super().__init__(message)
         if not isinstance(retry_at, dt.datetime):
-            raise TypeError(f"retry_at debe ser datetime, no {type(retry_at).__name__}")
+            raise TypeError(f"retry_at must be a datetime, not {type(retry_at).__name__}")
 
-        # Normalizado a UTC naive, que es lo que guarda la columna y contra lo
-        # que compara el scheduler. Sin esto, un plugin que use
-        # datetime.now(UTC) - lo natural de escribir - se compara contra
-        # utcnow() sin convertir, y en Postgres la columna ni siquiera acepta
-        # un datetime con tzinfo.
+        # Normalised to naive UTC, which is what the column stores and what the
+        # scheduler compares against. Without this, a plugin using
+        # datetime.now(UTC) - the natural thing to write - gets compared to
+        # utcnow() unconverted, and in Postgres the column won't even accept a
+        # datetime carrying tzinfo.
         if retry_at.tzinfo is not None:
             retry_at = retry_at.astimezone(dt.timezone.utc).replace(tzinfo=None)
 
@@ -106,15 +106,15 @@ class RateLimited(PluginError):
 
 @runtime_checkable
 class Hoster(Protocol):
-    """Las dos operaciones son distintas y ocurren en momentos distintos.
+    """The two operations differ and happen at different moments.
 
-    `crawl` corre al agregar el link y descubre qué archivos hay detrás.
-    `resolve` corre justo antes de descargar y devuelve la URL directa.
+    `crawl` runs when the link is added and discovers which files sit behind it.
+    `resolve` runs just before downloading and returns the direct URL.
 
-    Están separadas porque las URLs directas caducan: casi todo hoster las
-    firma con un token de un solo uso o con TTL de minutos, así que resolver
-    todo al agregar dejaría una cola de 40 archivos con 39 URLs vencidas
-    antes de llegar a ellas.
+    They are separate because direct URLs expire: almost every hoster signs them
+    with a single-use token or a TTL of minutes, so resolving everything at add
+    time would leave a queue of 40 files with 39 expired URLs before we reach
+    them.
     """
 
     name: str

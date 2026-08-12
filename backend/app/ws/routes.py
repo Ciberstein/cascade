@@ -5,15 +5,15 @@ from app.ws.manager import manager
 
 router = APIRouter()
 
-#: Se cierra con este código cuando falta el token de dueño o es inválido. El
-#: cliente lo distingue de una caída de red y no reintenta en bucle.
+#: Closed with this code when the owner token is missing or invalid. The
+#: client tells it apart from a network drop and does not retry in a loop.
 INVALID_OWNER = 4401
 
 
 @router.websocket("/ws")
 async def ws_endpoint(websocket: WebSocket, owner: str | None = None):
-    # Por query string y no por cabecera: la API de WebSocket del navegador no
-    # deja mandar cabeceras propias en el handshake.
+    # Query string rather than header: the browser's WebSocket API does not
+    # allow sending headers of its own during the handshake.
     owner_id = owner_from_query(owner)
     if owner_id is None:
         await websocket.close(code=INVALID_OWNER)

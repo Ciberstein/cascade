@@ -1,7 +1,7 @@
-"""Enlace directo: la URL pegada ya es descargable.
+"""Direct link: the pasted URL is already downloadable.
 
-Existe como plugin en vez de como caso especial para que el resto del código
-nunca tenga que ramificar entre "con plugin" y "sin plugin".
+It exists as a plugin rather than a special case so the rest of the code never
+has to branch between "with a plugin" and "without one".
 """
 
 from urllib.parse import urlparse
@@ -10,13 +10,13 @@ from app.plugins.base import CrawledFile, CrawlResult, DirectLink
 
 
 def filename_from_url(url: str) -> str:
-    """Último segmento del path de la URL, con "download" como último recurso.
+    """Last segment of the URL path, falling back to "download".
 
-    Se mira el path y no la URL entera: para "http://example.com/" la URL
-    completa dejaría "example.com", es decir, guardaría el archivo con el
-    nombre del host. Y se recortan las barras finales antes de partir porque,
-    sin eso, toda URL terminada en "/" caería en "download" y dos carpetas
-    distintas del mismo paquete se pisarían entre sí en el disco.
+    It looks at the path and not the whole URL: for "http://example.com/" the
+    full URL would leave "example.com", i.e. save the file under the host name.
+    And trailing slashes are stripped before splitting because, without that,
+    every URL ending in "/" would fall back to "download" and two different
+    folders in the same package would overwrite each other on disk.
     """
     name = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
     return name or "download"
@@ -26,7 +26,7 @@ class DirectHoster:
     name = "direct"
 
     def can_handle(self, url: str) -> bool:
-        return True  # el registro lo consulta último, así que esto es el fallback
+        return True  # the registry asks it last, so this is the fallback
 
     async def crawl(self, url: str) -> CrawlResult:
         return CrawlResult(files=[CrawledFile(url=url, filename=filename_from_url(url))])

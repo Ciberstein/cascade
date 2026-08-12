@@ -1,4 +1,4 @@
-"""Dónde vive en disco lo que baja un paquete."""
+"""Where a package's downloads live on disk."""
 
 import os
 
@@ -10,17 +10,18 @@ from app.paths import safe_filename, unique_name
 
 
 async def target_dir_for(db: AsyncSession, root: str, name: str) -> str:
-    """Carpeta del paquete: `root/<nombre saneado>`, sin repetir.
+    """The package folder: `root/<sanitised name>`, never repeated.
 
-    El nombre lo escribe el usuario, así que pasa por safe_filename antes de
-    tocar el disco: sin eso, un paquete llamado "../.." escribiría fuera de la
-    carpeta de descargas. Fase 1 evitaba esto usando el id generado, que era
-    seguro pero ilegible; sanear permite lo mismo con un nombre que se entienda.
+    The user writes the name, so it goes through safe_filename before touching
+    disk: without that, a package called "../.." would write outside the
+    downloads folder. Phase 1 avoided this by using the generated id, which was
+    safe but unreadable; sanitising gets the same guarantee with a name someone
+    can actually read.
 
-    Dos paquetes con el mismo nombre no comparten carpeta - se mezclarían sus
-    archivos y, con nombres iguales, se pisarían.
+    Two packages with the same name don't share a folder - their files would
+    mix, and identical names would overwrite each other.
     """
     result = await db.execute(select(Package.target_dir))
     taken = {os.path.basename(d) for d in result.scalars().all() if d}
 
-    return os.path.join(root, unique_name(safe_filename(name, fallback="paquete"), taken))
+    return os.path.join(root, unique_name(safe_filename(name, fallback="package"), taken))

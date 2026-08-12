@@ -1,4 +1,4 @@
-"""Descubrimiento y ejecución protegida de plugins."""
+"""Plugin discovery and guarded execution."""
 
 import asyncio
 import importlib
@@ -9,12 +9,12 @@ from app.plugins.base import DirectLink, CrawlResult, Hoster, PluginError
 
 logger = logging.getLogger(__name__)
 
-#: Tope por llamada a un plugin. No es contra plugins lentos (un hoster puede
-#: legítimamente hacerte esperar), es contra plugins colgados: sin tope, un
-#: sitio caído retiene un slot de concurrencia para siempre.
+#: Ceiling per plugin call. Not against slow plugins (a hoster can legitimately
+#: keep you waiting), but against hung ones: without a ceiling, a site that is
+#: down holds a concurrency slot forever.
 PLUGIN_TIMEOUT_SECONDS = 120.0
 
-#: Va último en el orden de matching: su can_handle devuelve True para todo.
+#: Goes last in the matching order: its can_handle returns True for everything.
 _FALLBACK_NAME = "direct"
 
 
@@ -23,28 +23,29 @@ class Registry:
         self._plugins = plugins
 
     def candidates(self, url: str) -> list[Hoster]:
-        """Todos los plugins que aceptan `url`, en orden, con `direct` al final.
+        """Every plugin that accepts `url`, in order, with `direct` last.
 
-        Devuelve la lista y no el primero porque un plugin puede aceptar una
-        URL y después descubrir que no era suya (`UnsupportedLink`): quien
-        llama sigue probando hasta que alguno responda, y `direct` cierra.
+        Returns the list rather than the first because a plugin can accept a URL
+        and then discover it wasn't theirs (`UnsupportedLink`): the caller keeps
+        trying until one answers, and `direct` closes the list.
         """
         accepted = []
         for plugin in self._plugins:
             try:
                 if plugin.can_handle(url):
                     accepted.append(plugin)
-            except Exception:  # noqa: BLE001 - código de terceros, y encima fuera del guard
-                # can_handle es lo primero que corre de cada plugin y es la
-                # única entrada que no pasa por _guard. Un regex malo acá
-                # tumbaría la búsqueda entera en vez de descartar un plugin.
-                logger.exception("can_handle de %s falló sobre %s", plugin.name, url)
+            except Exception:  # noqa: BLE001 - third-party code, and outside the guard
+                # can_handle is the first thing each plugin runs and the only
+                # entry point that doesn't go through _guard. A bad regex here
+                # would take down the whole search instead of dropping one
+                # plugin.
+                logger.exception("can_handle of %s failed on %s", plugin.name, url)
         return accepted
 
     def find(self, url: str) -> Hoster:
         candidates = self.candidates(url)
         if not candidates:
-            raise PluginError(f"ningún plugin acepta {url}")  # imposible con direct presente
+            raise PluginError(f"no plugin accepts {url}")  # impossible while direct exists
         return candidates[0]
 
     def get(self, name: str) -> Hoster | None:
@@ -58,10 +59,10 @@ class Registry:
 
 
 def discover() -> list[Hoster]:
-    """Carga todo módulo de app.plugins que exponga PLUGIN.
+    """Loads every module under app.plugins that exposes PLUGIN.
 
-    Agregar un hoster es agregar un archivo: no hay lista que mantener, que es
-    lo que hace barato arreglar un plugin roto.
+    Adding a hoster means adding a file: there is no list to maintain, which is
+    what makes fixing a broken plugin cheap.
     """
     import app.plugins as package
 
@@ -90,11 +91,11 @@ async def call_resolve(
 
 
 async def _guard(coro, *, plugin: Hoster, url: str, timeout: float):
-    """Acota el tiempo y normaliza cualquier fallo no tipado a PluginError.
+    """Bounds the time and normalises any untyped failure into PluginError.
 
-    Las excepciones tipadas pasan intactas: el registro y el scheduler las
-    usan para decidir (seguir probando, reagendar, marcar muerto), y
-    envolverlas perdería esa decisión.
+    Typed exceptions pass through untouched: the registry and the scheduler use
+    them to decide what to do (keep trying, reschedule, mark dead), and
+    wrapping them would lose that decision.
     """
     try:
         return await asyncio.wait_for(coro, timeout=timeout)
@@ -102,7 +103,7 @@ async def _guard(coro, *, plugin: Hoster, url: str, timeout: float):
         raise
     except (TimeoutError, asyncio.TimeoutError) as exc:
         raise PluginError(f"{plugin.name} timed out after {timeout}s on {url}") from exc
-    except Exception as exc:  # noqa: BLE001 - código de terceros dentro del proceso
+    except Exception as exc:  # noqa: BLE001 - third-party code inside the process
         logger.exception("plugin %s failed on %s", plugin.name, url)
         raise PluginError(f"{plugin.name}: {exc}") from exc
 

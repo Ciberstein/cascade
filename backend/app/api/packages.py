@@ -30,11 +30,11 @@ def _filename_from_url(url: str) -> str:
 
 
 def _target_dir_root() -> str:
-    """Dónde el servidor guarda lo que descarga, mientras el usuario lo retira.
+    """Where the server keeps what it downloads until the user retrieves it.
 
-    Sale del entorno y no de la configuración: el usuario recibe sus archivos
-    por el navegador, así que esta ruta es una decisión de infraestructura
-    (qué disco, qué volumen) y no algo que tenga sentido ofrecerle.
+    It comes from the environment and not from the settings: the user receives
+    their files through the browser, so this path is an infrastructure decision
+    (which disk, which volume) and not something worth offering them.
     """
     return _settings.download_root
 
@@ -91,8 +91,9 @@ async def update_package(
     result = await db.execute(
         select(Package)
         .options(selectinload(Package.items))
-        # El dueño va en el WHERE, no en un chequeo posterior: así un id de otro
-        # dueño da 404 en vez de 403, y no confirma que ese paquete exista.
+        # The owner goes in the WHERE, not in a check afterwards: that way
+        # another owner's id gives 404 rather than 403, and doesn't confirm
+        # that the package exists.
         .where(Package.id == package_id, Package.owner_id == owner)
     )
     package = result.scalar_one_or_none()
@@ -102,9 +103,9 @@ async def update_package(
     if payload.status is not None:
         package.status = payload.status
     if payload.name is not None:
-        # Solo el nombre visible. La carpeta en disco NO se renombra: los
-        # archivos ya bajados viven ahí, y moverlos a mitad de una descarga
-        # rompería las escrituras en curso.
+        # The visible name only. The folder on disk is NOT renamed: files
+        # already downloaded live there, and moving them mid-download would
+        # break the writes in flight.
         package.name = payload.name
 
     await db.commit()
@@ -119,12 +120,12 @@ async def download_item_file(
     db: AsyncSession = Depends(get_db),
     owner: str = Depends(get_owner),
 ):
-    """Entrega el archivo al navegador, que lo guarda donde guarda todo.
+    """Hands the file to the browser, which saves it wherever it saves all.
 
-    Cascade descarga al disco del servidor; la carpeta de descargas del usuario
-    está en su máquina. Este endpoint es el puente: el navegador se lo baja de
-    acá con Content-Disposition, y termina en su carpeta de siempre sin que
-    nadie tenga que configurar ninguna ruta.
+    Cascade downloads to the server's disk; the user's downloads folder is on
+    their machine. This endpoint is the bridge: the browser fetches it from
+    here with Content-Disposition, and it lands in their usual folder without
+    anyone configuring a path.
     """
     result = await db.execute(
         select(DownloadItem)
@@ -141,9 +142,9 @@ async def download_item_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     if item.status != "completed":
-        # A medio bajar el archivo existe pero está incompleto, y entregarlo
-        # daría un archivo corrupto que parece bueno.
-        raise HTTPException(status_code=409, detail="La descarga todavía no terminó")
+        # Mid-download the file exists but is incomplete, and handing it over
+        # would give a corrupt file that looks fine.
+        raise HTTPException(status_code=409, detail="That download hasn't finished yet")
 
     path = _item_path(item)
     if item.file_removed_at is not None or not os.path.isfile(path):
@@ -151,19 +152,19 @@ async def download_item_file(
         # libera. La fila queda en el historial, el archivo no.
         raise HTTPException(
             status_code=410,
-            detail="El archivo ya no está en el servidor. Volvé a agregar el enlace para bajarlo otra vez.",
+            detail="The file is no longer on the server. Add the link again to fetch it once more.",
         )
 
     if item.retrieved_at is None:
-        # Solo la primera vez: el margen de gracia se cuenta desde el primer
-        # retiro, no desde el último, o reintentar lo postergaría sin fin.
+        # First time only: the grace period counts from the first retrieval,
+        # not the last, or retrying would postpone it forever.
         item.retrieved_at = dt.datetime.utcnow()
         await db.commit()
 
-    # El borrado va como tarea de fondo: corre recién cuando la respuesta
-    # terminó de enviarse. Si el navegador corta a mitad, no llega a correr y
-    # el archivo queda para reintentar - que es justo lo que hay que preservar
-    # cuando la descarga se dispara sola y nadie está mirando.
+    # The delete runs as a background task: only once the response has
+    # finished sending. If the browser cuts out midway it never runs and the
+    # file stays for a retry - which is exactly what has to be preserved when
+    # the download fires on its own and nobody is watching.
     return FileResponse(
         path,
         filename=item.filename,
@@ -173,12 +174,12 @@ async def download_item_file(
 
 
 def _release_after_delivery(path: str) -> None:
-    """Libera el archivo apenas el usuario lo recibió.
+    """Frees the file as soon as the user has received it.
 
-    Solo toca el disco: marcar la fila exigiría abrir otra sesión (la de la
-    request ya se cerró cuando esto corre), y el barrido ya reconcilia los
-    archivos que faltan. Mientras tanto la UI se guía por `retrieved`, que sí
-    se marcó durante la request.
+    It only touches the disk: marking the row would mean opening another
+    session (the request's is already closed by the time this runs), and the
+    sweep already reconciles missing files. Meanwhile the UI goes by
+    `retrieved`, which was marked during the request.
     """
     try:
         os.remove(path)
@@ -189,11 +190,11 @@ def _release_after_delivery(path: str) -> None:
 
 
 def _item_path(item: DownloadItem) -> str:
-    """Ruta en disco, contenida dentro de la carpeta del paquete.
+    """Path on disk, contained inside the package folder.
 
-    Se recalcula igual que en el motor en vez de guardarse: así el chequeo de
-    contención se aplica también acá, y una fila manipulada no puede hacer que
-    el servidor entregue un archivo de fuera del paquete.
+    Recomputed the same way the engine does rather than stored: that way the
+    containment check applies here too, and a tampered row cannot make the
+    server hand over a file from outside the package.
     """
     package_dir = item.package.target_dir
     return ensure_within(package_dir, os.path.join(package_dir, safe_filename(item.filename)))
@@ -205,11 +206,11 @@ async def delete_package(
     db: AsyncSession = Depends(get_db),
     owner: str = Depends(get_owner),
 ):
-    """Saca el paquete de la lista y libera lo que quede en el servidor.
+    """Takes the package off the list and frees whatever is left on the server.
 
-    Sí borra los archivos, a diferencia de lo que haría un gestor que guarda:
-    acá el servidor es un lugar de paso y la copia del usuario está en su
-    equipo. Dejarlos sería exactamente la acumulación que se quiere evitar.
+    It does delete the files, unlike a manager that keeps things: here the
+    server is a place to pass through and the user's copy is on their machine.
+    Leaving them would be exactly the accumulation this design avoids.
     """
     result = await db.execute(
         select(Package)
@@ -221,11 +222,11 @@ async def delete_package(
         raise HTTPException(status_code=404, detail="Package not found")
 
     if any(i.status == "running" for i in package.items):
-        # El motor tiene archivos abiertos y va a seguir escribiendo checkpoints
-        # sobre filas que ya no existirían.
+        # The engine has files open and would keep writing checkpoints over
+        # rows that no longer exist.
         raise HTTPException(
             status_code=409,
-            detail="Hay archivos descargando; pausá o cancelá el paquete antes de eliminarlo",
+            detail="Files are still downloading; pause or stop the package before removing it",
         )
 
     for item in package.items:

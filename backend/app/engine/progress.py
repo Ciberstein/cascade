@@ -12,8 +12,8 @@ class ThrottledBroadcaster:
         self._lock = asyncio.Lock()
 
     def report(self, item_id: str, downloaded_bytes: int, owner_id: str | None = None) -> None:
-        # owner_id viaja en el payload para que el manager sepa a quién
-        # entregarlo; lo quita antes de mandarlo al cliente.
+        # owner_id travels in the payload so the manager knows who to deliver
+        # it to; it strips the field before sending to the client.
         self._latest[item_id] = {
             "type": "progress",
             "item_id": item_id,

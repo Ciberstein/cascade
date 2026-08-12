@@ -109,7 +109,7 @@ async def test_a_video_with_nothing_downloadable_fails_with_a_readable_reason():
     # que entregar como archivo único.
     plugin = hoster({"formats": [VIDEO_ONLY, HLS]})
 
-    with pytest.raises(PluginError, match="ninguna calidad descargable"):
+    with pytest.raises(PluginError, match="no quality downloadable"):
         await plugin.resolve("https://sitio/v/1")
 
 
@@ -173,7 +173,7 @@ async def test_a_track_explicitly_absent_is_never_picked():
     plugin = hoster({"formats": [AUDIO_ONLY, VIDEO_ONLY]})
 
     # "none" sí significa que la pista no está: eso daría un video mudo.
-    with pytest.raises(PluginError, match="ninguna calidad descargable"):
+    with pytest.raises(PluginError, match="no quality downloadable"):
         await plugin.resolve("https://sitio/v/1")
 
 

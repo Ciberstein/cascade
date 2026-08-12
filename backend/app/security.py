@@ -1,4 +1,4 @@
-"""Hasheo de contraseñas para las cuentas opcionales."""
+"""Password hashing for the optional accounts."""
 
 from passlib.context import CryptContext
 

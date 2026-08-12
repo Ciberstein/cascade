@@ -43,12 +43,12 @@ async def resume_stale_running_items(db: AsyncSession) -> None:
 
 def _dest_path(item: DownloadItem) -> str:
     package_dir = item.package.target_dir if item.package else "/downloads"
-    # Doble barrera con safe_filename del crawler, a propósito: esta corre
-    # justo antes de crear el directorio y abrir el archivo, así que también
-    # cubre items que hayan entrado por otro camino. Si algo escapó, el item
-    # falla en vez de escribir fuera de su paquete.
-    # Las dos partes de una unión viven en la misma carpeta que el resultado:
-    # sin sufijo se pisarían entre sí.
+    # A second barrier alongside the crawler's safe_filename, on purpose:
+    # this one runs just before creating the directory and opening the file, so
+    # it also covers items that arrived by another route. If anything slipped
+    # through, the item fails instead of writing outside its package.
+    # Both parts of a merge live in the same folder as the result: without a
+    # suffix they would overwrite each other.
     name = safe_filename(item.filename) + part_suffix(item.merge_role)
     return ensure_within(package_dir, os.path.join(package_dir, name))
 
@@ -120,8 +120,8 @@ async def _run_one_item(
     # resolution, directory creation, the resume-chunk lookup) is what threw -
     # see the try's docstring-style comment for why the try starts here and
     # not just around run_download_item.
-    # Se lee una sola vez, fuera de los callbacks: item.package ya viene
-    # cargado y tocarlo desde on_progress dirtiaría la sesión compartida.
+    # Read once, outside the callbacks: item.package is already loaded and
+    # touching it from on_progress would dirty the shared session.
     owner_id = item.package.owner_id if item.package else None
 
     chunks_ref: list[Chunk] = []
@@ -139,8 +139,8 @@ async def _run_one_item(
         # download and package-completion check too - not just this one
         # item's. Catching broadly here keeps a single item's failure
         # contained to that item.
-        # Resolver acá y no al agregar: las URLs directas caducan, así que la
-        # que sirve es la que se pide justo antes de bajar.
+        # Resolve here and not at add time: direct URLs expire, so the one
+        # that works is the one requested just before downloading.
         direct = await resolver(item.url, item.hoster, item.format_id)
         resolved_url = direct.url
         dest_path = _dest_path(item)
@@ -251,9 +251,9 @@ async def _run_one_item(
             item.total_size = result.total_size
             item.downloaded_bytes = downloaded_so_far
             item.status = "completed"
-            # Se limpia al llegar a un estado final: si quedara, la UI seguiría
-            # anunciando "esperando hasta HH:MM" sobre un item ya terminado, y
-            # ese valor viejo taparía la espera real de un item hermano.
+            # Cleared on reaching a final state: left behind, the UI would
+            # keep announcing "waiting until HH:MM" over a finished item, and
+            # that stale value would hide a sibling's real wait.
             item.retry_after = None
             for chunk in chunks_ref:
                 chunk.status = "completed"
@@ -262,9 +262,9 @@ async def _run_one_item(
     except RateLimited as exc:
         async with db_lock:
             await db.rollback()
-            # Vuelve a queued, no a error: el hoster no falló, pidió esperar.
-            # Un estado propio obligaría a moverlo de ida y vuelta con dos
-            # transiciones más que pueden fallar.
+            # Back to queued, not error: the hoster didn't fail, it asked us
+            # to wait. A dedicated state would mean moving it there and back
+            # with two more transitions that can fail.
             item.status = "queued"
             item.retry_after = exc.retry_at
             item.error_message = None
@@ -278,7 +278,7 @@ async def _run_one_item(
             # commit too.
             await db.rollback()
             item.status = "error"
-            item.retry_after = None  # mismo motivo que en el camino de éxito
+            item.retry_after = None  # same reason as on the success path
             item.error_message = str(exc)
             # Keep the durable offsets rather than the optimistic byte counter:
             # a user who retries this item should pick up from what is actually
@@ -338,8 +338,8 @@ async def run_pending(
         select(DownloadItem)
         .where(
             DownloadItem.status == "queued",
-            # Un item agendado sigue en "queued": es trabajo pendiente que
-            # todavía no toca, no un estado aparte.
+            # A scheduled item stays "queued": it is pending work whose turn
+            # hasn't come, not a separate state.
             (DownloadItem.retry_after.is_(None)) | (DownloadItem.retry_after <= now),
         )
         .limit(max_concurrent)
@@ -351,19 +351,19 @@ async def run_pending(
         if _on_start_for_test:
             _on_start_for_test(item.id)
 
-    # Se capturan ANTES del gather: el camino de error de _run_one_item hace
-    # db.rollback(), que expira el estado en memoria de todas las instancias de
-    # la sesión compartida - también las de los items que sí terminaron bien.
-    # Leerles un atributo después dispara una recarga perezosa fuera del
-    # contexto greenlet y revienta con MissingGreenlet, y entonces el paquete
-    # nunca cambia de estado. Solo se nota cuando en un mismo lote conviven un
-    # éxito y un fallo.
+    # Captured BEFORE the gather: the error path of _run_one_item calls
+    # db.rollback(), which expires the in-memory state of every instance in the
+    # shared session - including those of the items that did finish cleanly.
+    # Reading an attribute off them afterwards triggers a lazy reload outside
+    # the greenlet context and blows up with MissingGreenlet, and then the
+    # package never changes state. It only shows up when one batch contains
+    # both a success and a failure.
     package_ids = {item.package_id for item in items}
 
     await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, resolver) for item in items))
 
-    # Antes del veredicto: un grupo recién unido deja de tener parte de audio,
-    # y juzgar el paquete antes lo vería incompleto.
+    # Before the verdict: a freshly merged group no longer has an audio part,
+    # and judging the package earlier would see it as incomplete.
     await merge_ready_groups(db)
 
     for package_id in package_ids:
@@ -372,11 +372,11 @@ async def run_pending(
 
 
 def _verdict(pkg_items: list[DownloadItem]) -> str | None:
-    """Estado que le corresponde al paquete, o None si todavía no toca decidir.
+    """The status the package should have, or None if it is too early to say.
 
-    Un paquete solo se juzga cuando ya no queda nada por hacer: "queued" y
-    "running" siguen en curso, y "paused"/"canceled" son decisiones del usuario
-    que no deben disparar un veredicto.
+    A package is only judged once there is nothing left to do: "queued" and
+    "running" are still in flight, and "paused"/"canceled" are user decisions
+    that must not trigger a verdict.
     """
     if not pkg_items:
         return None
@@ -385,9 +385,9 @@ def _verdict(pkg_items: list[DownloadItem]) -> str | None:
     if all(i.status == "completed" for i in pkg_items):
         return "completed"
     if any(i.status == "error" for i in pkg_items):
-        # Con todos sus items fallidos el paquete se quedaba en "queued" para
-        # siempre, y el dashboard - que muestra el estado del paquete - se veía
-        # en 0% sin ninguna señal de error.
+        # With every item failed the package stayed "queued" forever, and the
+        # dashboard - which shows the package status - sat at 0% with no sign
+        # that anything had gone wrong.
         return "error"
     return None
 
@@ -405,14 +405,14 @@ async def _apply_verdict(db: AsyncSession, package_id: str) -> None:
 
 
 async def reconcile_package_statuses(db: AsyncSession) -> None:
-    """Recalcula paquetes cuyo estado quedó contradiciendo a sus items.
+    """Recomputes packages whose status ended up contradicting their items.
 
-    El veredicto normal solo corre sobre los paquetes que tuvieron items en el
-    lote de ese tick. Un paquete cuyos items ya terminaron nunca vuelve a
-    entrar en un lote, así que si el proceso murió entre el commit del item y
-    el del paquete - o si la lógica del veredicto cambió, como pasó al agregar
-    el estado "error" - queda desincronizado para siempre y no hay nada que lo
-    corrija. Esto se ejecuta al arrancar y lo deja consistente.
+    The normal verdict only runs over packages that had items in that tick's
+    batch. A package whose items have all finished never enters a batch again,
+    so if the process died between committing the item and committing the
+    package - or if the verdict logic changed, as it did when the "error" state
+    was added - it stays out of sync forever with nothing to correct it. This
+    runs at startup and makes it consistent.
     """
     result = await db.execute(select(Package).where(Package.status.in_(("queued", "running"))))
     for package in result.scalars().all():

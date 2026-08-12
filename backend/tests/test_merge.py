@@ -63,7 +63,7 @@ async def test_a_failed_merge_fails_the_item_instead_of_leaving_it_limbo(session
     # Sin esto el grupo se reintentaría en cada tick para siempre, y el paquete
     # nunca llegaría a un estado final.
     assert video.status == "error"
-    assert "unir" in video.error_message
+    assert "merge" in video.error_message
 
 
 @pytest.mark.asyncio

@@ -83,17 +83,17 @@ async def promote(
         select(CrawlJob.id).where(CrawlJob.id == job_id, CrawlJob.owner_id == owner)
     )
     if owned.scalar_one_or_none() is None:
-        # Sin esto, conociendo un id de job ajeno se podrían promover sus
-        # resultados al paquete propio.
+        # Without this, knowing someone else's job id would let you promote
+        # their results into your own package.
         raise HTTPException(status_code=404, detail="Crawl job not found")
 
     result = await db.execute(
         select(CrawlResult).where(
             CrawlResult.crawl_job_id == job_id,
             CrawlResult.id.in_(payload.result_ids),
-            # La UI ya deshabilita las casillas de los muertos, pero eso es
-            # presentación: sin filtrar acá, un cliente puede encolar un item
-            # cuyo fallo está garantizado.
+            # The UI already disables the checkboxes of dead links, but that
+            # is presentation: without filtering here, a client can queue an
+            # item whose failure is guaranteed.
             CrawlResult.status == "ok",
         )
     )
@@ -110,15 +110,15 @@ async def promote(
     taken: set[str] = set()
     for found in chosen:
         variant = _chosen_variant(found, payload.quality.get(found.id))
-        # La extensión sale de la calidad elegida, no del formato por defecto:
-        # un .webm con audio AAC adentro no se puede escribir, y ffmpeg falla
-        # recién después de haber bajado las dos pistas enteras.
+        # The extension comes from the chosen quality, not the default
+        # format: a .webm with AAC audio inside cannot be written, and ffmpeg
+        # only fails after both tracks have been downloaded in full.
         filename = unique_name(_with_ext(found.filename, variant), taken)
 
         if variant and variant.get("needs_merge"):
-            # Esta calidad viene en pistas separadas: se encolan las dos y el
-            # motor las une al terminar. El audio no se le muestra al usuario -
-            # es un medio, no una descarga que él pidió.
+            # This quality comes as separate tracks: both are queued and the
+            # engine merges them at the end. The audio is not shown to the user
+            # - it is a means, not a download they asked for.
             group = uuid.uuid4().hex
             db.add(
                 DownloadItem(
@@ -140,13 +140,13 @@ async def promote(
             DownloadItem(
                 package_id=package.id,
                 url=found.url,
-                # El crawler aplana el árbol: "media/notes.txt" y
-                # "media/sub/notes.txt" llegan acá con el mismo nombre y van a
-                # la misma carpeta. Sin desambiguar serían dos items con el
-                # mismo destino, y el scheduler los correría a la vez: dos
-                # escritores abriendo el mismo archivo en "r+b" y buscando sus
-                # propios rangos. El resultado es un archivo con las dos
-                # descargas entremezcladas y ambos items en "completed".
+                # The crawler flattens the tree: "media/notes.txt" and
+                # "media/sub/notes.txt" arrive here with the same name and go to
+                # the same folder. Without disambiguating they would be two
+                # items with one destination, and the scheduler would run them
+                # together: two writers opening the same file in "r+b" and
+                # seeking their own ranges. The result is one file with both
+                # downloads interleaved and both items marked "completed".
                 filename=filename,
                 total_size=variant.get("size") if variant else found.size,
                 hoster=found.hoster,
@@ -165,7 +165,7 @@ async def promote(
 
 
 def _with_ext(filename: str, variant: dict | None) -> str:
-    """Reemplaza la extensión por la del contenedor de la calidad elegida."""
+    """Swaps the extension for the container of the chosen quality."""
     ext = (variant or {}).get("ext")
     if not ext:
         return filename
@@ -174,11 +174,12 @@ def _with_ext(filename: str, variant: dict | None) -> str:
 
 
 def _chosen_variant(found, variant_id: str | None) -> dict | None:
-    """La calidad elegida, o la mejor disponible si el cliente no eligió.
+    """The chosen quality, or the best available if the client didn't choose.
 
-    Las variantes vienen ordenadas de mejor a peor, así que la primera es el
-    default sensato: quien no elige espera la mejor. Un id que ya no existe
-    cae en ese mismo default en vez de fallar la promoción entera.
+    Variants arrive ordered best to worst, so the first is the sensible
+    default: whoever doesn't choose expects the best. An id that no longer
+    exists falls back to that same default rather than failing the whole
+    promotion.
     """
     variants = found.variants
     if not variants:

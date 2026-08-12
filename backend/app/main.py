@@ -36,28 +36,28 @@ _settings = Settings()
 # instead of spinning.
 _POLL_INTERVAL_SECONDS = 2.0
 
-#: Los crawls son cortos y el usuario está mirando la bandeja, así que se
-#: sondea más seguido que las descargas.
+#: Crawls are short and the user is watching the tray, so this polls more
+#: often than downloads do.
 _CRAWL_POLL_INTERVAL_SECONDS = 1.0
 
-#: El barrido no tiene apuro: lo que libera ya cumplió su función. Correrlo
-#: seguido solo gastaría consultas.
+#: The sweep is in no hurry: what it frees has already served its purpose.
+#: Running it often would only burn queries.
 _SWEEP_INTERVAL_SECONDS = 300.0
 
 
 async def _resolve(url: str, hoster: str, format_id: str | None = None) -> DirectLink:
-    """Devuelve la URL directa usando el plugin con el que se encoló el item.
+    """Returns the direct URL using the plugin the item was queued with.
 
-    Si ese plugin ya no existe (renombrado o eliminado entre que se encoló y
-    que se levantó), se vuelve a matchear por URL en vez de fallar el item:
-    en el peor caso cae en `direct`, que es exactamente lo que hacía Fase 1.
+    If that plugin no longer exists (renamed or removed between queueing and
+    startup), it re-matches by URL instead of failing the item: at worst it
+    falls back to `direct`, which is exactly what Phase 1 did.
     """
     named = registry.get(hoster)
     candidates = [named] if named is not None else []
-    # Los demás quedan detrás como alternativa: si el plugin con el que se
-    # encoló contesta UnsupportedLink (la URL cambió de forma, el sitio dejó
-    # de servir lo que servía), se sigue probando hasta `direct` en vez de
-    # fallar el item.
+    # The rest stay behind as alternatives: if the plugin it was queued with
+    # answers UnsupportedLink (the URL changed shape, the site stopped serving
+    # what it served), we keep trying down to `direct` instead of failing the
+    # item.
     candidates += [p for p in registry.candidates(url) if p is not named]
 
     last: UnsupportedLink | None = None
@@ -67,7 +67,7 @@ async def _resolve(url: str, hoster: str, format_id: str | None = None) -> Direc
         except UnsupportedLink as exc:
             last = exc
             continue
-    raise last if last is not None else PluginError(f"ningún plugin resolvió {url}")
+    raise last if last is not None else PluginError(f"no plugin resolved {url}")
 
 
 async def _effective_limits(db: "AsyncSession") -> tuple[int, int]:
@@ -105,14 +105,14 @@ async def _scheduler_tick() -> None:
 
 
 async def _scheduler_loop(stop: asyncio.Event | None = None) -> None:
-    """Corre ticks hasta que `stop` se levanta.
+    """Runs ticks until `stop` is raised.
 
-    El Event entra por parámetro y no vive como global del módulo: un
-    `asyncio.Event` queda atado al primer event loop que lo espera, y cada
-    test de pytest-asyncio corre en el suyo, así que un singleton lanzaría
-    "bound to a different event loop" en el segundo test que lo usara -
-    además de heredar el set() que dejó el lifespan anterior al apagarse.
-    Quien no pase uno (los tests) recibe el suyo propio.
+    The Event arrives as a parameter rather than living as a module global: an
+    `asyncio.Event` binds to the first event loop that awaits it, and every
+    pytest-asyncio test runs in its own, so a singleton would raise "bound to a
+    different event loop" on the second test to use it - besides inheriting the
+    set() the previous lifespan left behind on shutdown. Callers who pass
+    nothing (the tests) get their own.
     """
     stop = stop or asyncio.Event()
     while not stop.is_set():
@@ -127,9 +127,9 @@ async def _scheduler_loop(stop: asyncio.Event | None = None) -> None:
             # out of here and ends the task as intended.
             logger.exception("scheduler tick failed; retrying after the poll interval")
         with suppress(TimeoutError):
-            # wait_for sobre el flag en vez de sleep: apagar no espera un
-            # intervalo entero, y despertar temprano es seguro porque el chequeo
-            # del while ocurre antes del próximo tick.
+            # wait_for on the flag rather than sleep: shutdown doesn't wait a
+            # whole interval, and waking early is safe because the while check
+            # happens before the next tick.
             await asyncio.wait_for(stop.wait(), timeout=_POLL_INTERVAL_SECONDS)
 
 
@@ -146,12 +146,12 @@ async def _crawl_tick() -> None:
 
 
 async def _crawl_loop(stop: asyncio.Event | None = None) -> None:
-    """Mismo contrato que _scheduler_loop; ver allí por qué el Event no es global."""
+    """Same contract as _scheduler_loop; see there why the Event isn't global."""
     stop = stop or asyncio.Event()
     while not stop.is_set():
         try:
-            # Awaited hasta el final antes del siguiente ciclo: run_pending_crawls
-            # comparte la misma precondición single-flight que run_pending.
+            # Awaited to completion before the next cycle: run_pending_crawls
+            # shares the same single-flight precondition as run_pending.
             await _crawl_tick()
         except Exception:  # noqa: BLE001 - un tick malo no puede matar el loop
             logger.exception("crawl tick failed; retrying after the poll interval")
@@ -206,10 +206,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # Parada ordenada por flag, no task.cancel(): el runner de crawl commitea,
-        # y una cancelación puede caer dentro del commit y dejar la conexión a
-        # medias, que es exactamente lo que envenenó la sesión compartida en
-        # Fase 1. El flag solo se observa entre ticks.
+        # Orderly shutdown through a flag, not task.cancel(): the crawl runner
+        # commits, and a cancellation can land inside the commit and leave the
+        # connection half-done, which is exactly what poisoned the shared
+        # session in Phase 1. The flag is only observed between ticks.
         stop.set()
         for task in tasks:
             await task

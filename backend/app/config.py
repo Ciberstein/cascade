@@ -9,13 +9,13 @@ class Settings(BaseSettings):
     max_concurrent_downloads: int = 3
     chunks_per_file: int = 4
     max_concurrent_crawls: int = 5
-    #: Margen tras retirar un archivo antes de borrarlo del servidor. No es
-    #: cero a propósito: si la descarga del navegador se corta al 90%, borrarlo
-    #: al instante dejaría al usuario sin nada y con la copia del hoster ya
-    #: consumida.
+    #: Grace period after a file is retrieved, before it is deleted from the
+    #: server. Deliberately not zero: if the browser's download breaks at 90%,
+    #: deleting instantly would leave the user with nothing and the hoster's
+    #: copy already spent.
     retrieval_grace_minutes: int = 30
-    #: Tope para lo que nadie retira. Sin esto, un archivo que el usuario nunca
-    #: fue a buscar se queda para siempre y el disco vuelve a crecer.
+    #: Ceiling for whatever nobody retrieves. Without it, a file the user never
+    #: came back for stays forever and the disk grows again.
     max_retention_hours: int = 24
     # Lets the API run without the download engine attached - used by the test
     # suite, which has no live Postgres for the loop to poll.

@@ -8,11 +8,11 @@ from app.settings_store import get_or_create_settings as _get_or_create_settings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-# OJO: esta configuración es GLOBAL del servidor, no por dueño. La carpeta de
-# descarga y los límites del motor son decisiones del operador, y hoy cualquiera
-# que llegue puede cambiarlas para todos. Es aceptable en una instancia propia y
-# es un bloqueante conocido para el uso público: ahí tienen que pasar a ser
-# solo-lectura o quedar detrás de un token de operador.
+# CAREFUL: these settings are GLOBAL to the server, not per owner. The engine
+# limits are an operator's decision, and today anyone who shows up can change
+# them for everybody. That is acceptable on a private instance and is a known
+# blocker for public use: there they have to become read-only or sit behind an
+# operator token.
 
 
 @router.get("", response_model=SettingsResponse)

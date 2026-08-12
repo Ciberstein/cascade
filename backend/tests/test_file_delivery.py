@@ -138,7 +138,7 @@ async def test_a_released_file_says_so_instead_of_failing_obscurely(async_auth_c
     response = await async_auth_client.get(f"/packages/{package.id}/items/{item.id}/file")
 
     assert response.status_code == 410
-    assert "ya no está en el servidor" in response.json()["detail"]
+    assert "no longer on the server" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

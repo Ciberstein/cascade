@@ -17,8 +17,8 @@ class Package(Base):
     __tablename__ = "packages"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    #: Token anónimo del navegador que lo creó. No hay login: este token es la
-    #: identidad, y toda consulta se filtra por él.
+    #: Anonymous token of the browser that created it. There is no login:
+    #: this token is the identity, and every query filters by it.
     owner_id: Mapped[str] = mapped_column(String(128), index=True)
     name: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(20), default="queued")
@@ -40,26 +40,26 @@ class DownloadItem(Base):
     downloaded_bytes: Mapped[int] = mapped_column(default=0)
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
     retries: Mapped[int] = mapped_column(default=0)
-    #: Qué plugin resolvió este link, para saber a cuál llamar al descargar.
-    #: Nunca nulo: un enlace directo queda como "direct".
+    #: Which plugin resolved this link, so we know which one to call when
+    #: downloading. Never null: a plain link is recorded as "direct".
     hoster: Mapped[str] = mapped_column(String(64), default="direct")
-    #: Cuándo vuelve a ser elegible. El item sigue en "queued": para la cola es
-    #: trabajo pendiente que todavía no toca, no un estado distinto.
+    #: When it becomes eligible again. The item stays "queued": to the queue
+    #: it is pending work whose turn hasn't come, not a separate state.
     retry_after: Mapped[dt.datetime | None] = mapped_column(default=None)
-    #: Cuándo el usuario se lo bajó por primera vez. El servidor es un lugar de
-    #: paso: una vez retirado, el archivo se libera.
+    #: When the user first fetched it. The server is a place to pass through:
+    #: once retrieved, the file is freed.
     retrieved_at: Mapped[dt.datetime | None] = mapped_column(default=None)
-    #: Cuándo el barrido borró el archivo del disco del servidor. La fila queda
-    #: en el historial; lo que se va es el archivo.
+    #: When the sweep deleted the file from the server's disk. The row stays
+    #: in the history; what goes is the file.
     file_removed_at: Mapped[dt.datetime | None] = mapped_column(default=None)
-    #: Identificador de formato del hoster (la calidad elegida). None para lo
-    #: que no es video.
+    #: The hoster's format identifier (the chosen quality). None for anything
+    #: that isn't video.
     format_id: Mapped[str | None] = mapped_column(String(64), default=None)
-    #: Las calidades altas vienen en pistas separadas. Las dos partes comparten
-    #: este grupo y se unen cuando ambas terminan.
+    #: High qualities arrive as separate tracks. Both parts share this group
+    #: and are merged once they have both finished.
     merge_group: Mapped[str | None] = mapped_column(String(36), index=True, default=None)
-    #: "video" o "audio" dentro del grupo. La parte de audio no se le muestra
-    #: al usuario: es un medio, no una descarga que él pidió.
+    #: "video" or "audio" within the group. The audio part is not shown to the
+    #: user: it is a means, not a download they asked for.
     merge_role: Mapped[str | None] = mapped_column(String(10), default=None)
 
     package: Mapped["Package"] = relationship(back_populates="items")
@@ -67,16 +67,17 @@ class DownloadItem(Base):
 
     @property
     def retrieved(self) -> bool:
-        """Si el usuario ya se lo llevó. El navegador lo usa para no volver a
-        dispararlo solo en cada sondeo."""
+        """Whether the user has already taken it. The browser uses this to
+        avoid firing it again on every poll."""
         return self.retrieved_at is not None
 
     @property
     def file_removed(self) -> bool:
-        """Si el archivo ya se liberó del servidor.
+        """Whether the file has already been freed from the server.
 
-        Propiedad y no columna: es la misma información que file_removed_at,
-        y duplicarla en la base abriría la puerta a que se contradigan.
+        A property and not a column: it is the same information as
+        file_removed_at, and duplicating it in the database would open the door
+        to the two contradicting each other.
         """
         return self.file_removed_at is not None
 
@@ -105,7 +106,7 @@ class GlobalSettings(Base):
 
 
 class CrawlJob(Base):
-    """Un pegado de links esperando a que se descubra qué hay detrás."""
+    """A paste of links waiting for what is behind them to be discovered."""
 
     __tablename__ = "crawl_jobs"
 
@@ -122,15 +123,16 @@ class CrawlJob(Base):
 
 
 class CrawlResult(Base):
-    """Un archivo descubierto, todavía no encolado.
+    """A discovered file, not queued yet.
 
-    OJO con el nombre: `app.plugins.base.CrawlResult` es otra cosa — el valor
-    que devuelve un plugin (archivos + hijos a seguir). Este es la fila. Ningún
-    módulo debe importar los dos; el puente entre ambos es `DiscoveredFile`.
+    Careful with the name: `app.plugins.base.CrawlResult` is a different thing -
+    the value a plugin returns (files + children to follow). This one is the
+    row. No module should import both; the bridge between them is
+    `DiscoveredFile`.
 
-    Qué se seleccionó no se guarda acá: vive en el cliente y viaja como lista
-    de ids al confirmar. Persistirlo sería estado que mantener sincronizado
-    sin que nadie lo consulte después.
+    What was selected is not stored here: it lives in the client and travels as
+    a list of ids on confirmation. Persisting it would be state to keep in sync
+    that nobody reads afterwards.
     """
 
     __tablename__ = "crawl_results"
@@ -143,26 +145,26 @@ class CrawlResult(Base):
     hoster: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(20), default="ok")
     error_message: Mapped[str | None] = mapped_column(Text, default=None)
-    #: Calidades ofrecidas, serializadas. Van como JSON y no como tabla porque
-    #: solo se leen enteras para pintar el selector y se descartan al promover.
+    #: The offered qualities, serialised. JSON rather than a table because they
+    #: are only read whole to paint the picker, and discarded on promotion.
     variants_json: Mapped[str | None] = mapped_column(Text, default=None)
 
     job: Mapped["CrawlJob"] = relationship(back_populates="results")
 
     @property
     def variants(self) -> list[dict]:
-        """Las calidades ofrecidas, deserializadas para la respuesta."""
+        """The offered qualities, deserialised for the response."""
         import json
 
         return json.loads(self.variants_json) if self.variants_json else []
 
 
 class User(Base):
-    """Cuenta opcional. No es una puerta de entrada, es un recuperador.
+    """Optional account. Not a front door, a way to recover.
 
-    Su única función es dejar volver a obtener `owner_id` desde otro
-    dispositivo. Por eso `owner_id` es único y no cambia nunca: registrarse no
-    mueve un solo registro de lo ya descargado.
+    Its only job is to let `owner_id` be obtained again from another device.
+    That is why `owner_id` is unique and never changes: registering does not
+    move a single row of what has already been downloaded.
     """
 
     __tablename__ = "users"
