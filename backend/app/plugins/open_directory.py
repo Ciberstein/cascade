@@ -66,7 +66,7 @@ class OpenDirectoryHoster:
         return CrawlResult(files=files, children=children)
 
     async def resolve(self, url: str, format_id: str | None = None) -> DirectLink:
-        # Un autoindex sirve el archivo en su propia URL: no hay nada que firmar.
+        # An autoindex serves the file at its own URL: nothing to sign.
         return DirectLink(url=url)
 
 

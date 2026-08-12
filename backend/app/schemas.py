@@ -46,7 +46,7 @@ class DownloadItemResponse(BaseModel):
     #: True once the file has been freed from the server. The row stays in the
     #: history; what went is the file.
     file_removed: bool
-    #: Ya retirado por el usuario. El navegador no vuelve a dispararlo solo.
+    #: Already retrieved by the user. The browser won't fire it again itself.
     retrieved: bool
     #: "video"/"audio" while a quality that arrived as separate tracks is
     #: downloading; None the rest of the time. The audio part is not listed: it
@@ -73,7 +73,7 @@ class DownloadItemResponse(BaseModel):
 
 
 class UpdatePackageRequest(BaseModel):
-    """Cambiar el estado, el nombre, o ambos."""
+    """Change the status, the name, or both."""
 
     status: Literal["queued", "paused", "canceled"] | None = None
     name: str | None = Field(default=None, min_length=1, max_length=255)
@@ -161,8 +161,8 @@ class CrawlJobResponse(BaseModel):
 class PromoteRequest(BaseModel):
     name: str = Field(min_length=1)
     result_ids: list[str] = Field(min_length=1)
-    #: Calidad elegida por resultado: {id_de_resultado: id_de_variante}. Lo que
-    #: no aparezca usa la mejor disponible.
+    #: Quality chosen per result: {result_id: variant_id}. Anything absent
+    #: uses the best available.
     quality: dict[str, str] = Field(default_factory=dict)
 
 

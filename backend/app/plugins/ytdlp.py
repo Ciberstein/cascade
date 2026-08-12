@@ -45,7 +45,7 @@ class YtDlpHoster:
     name = "ytdlp"
 
     def __init__(self, extract: Callable[[str, bool], dict] | None = None):
-        # Inyectable para poder testear sin red ni yt-dlp de por medio.
+        # Injectable so it can be tested without a network or yt-dlp involved.
         self._extract = extract
 
     def can_handle(self, url: str) -> bool:
@@ -186,14 +186,14 @@ def _extract_sync(url: str, opts: dict) -> dict[str, Any]:
 
 
 def _translate(exc: Exception, url: str) -> PluginError:
-    """Traduce los errores de yt-dlp al vocabulario del contrato."""
+    """Translates yt-dlp's errors into the contract's vocabulary."""
     message = str(exc)
     lowered = message.lower()
 
     if any(s in lowered for s in ("not available", "private", "removed", "deleted", "404")):
         return LinkDead(f"{url}: {message}")
     if "unsupported url" in lowered:
-        # Que siga probando el registro: termina en `direct`.
+        # Let the registry keep trying: it ends at `direct`.
         return UnsupportedLink(f"{url}: {message}")
     return PluginError(f"{url}: {message}")
 
@@ -256,7 +256,7 @@ _OFFERED_HEIGHTS = (2160, 1440, 1080, 720, 480, 360, 240)
 
 
 def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
-    """Las calidades entre las que el usuario puede elegir, de mejor a peor.
+    """The qualities the user can choose from, best to worst.
 
     Includes those arriving as separate tracks: they are paired with the best
     loose audio and the engine merges them at the end. Without that, YouTube's

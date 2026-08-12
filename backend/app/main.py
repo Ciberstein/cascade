@@ -1,9 +1,12 @@
 import asyncio
 import logging
+import mimetypes
 from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.api.account import router as account_router
 from app.api.crawl_jobs import router as crawl_jobs_router
@@ -153,7 +156,7 @@ async def _crawl_loop(stop: asyncio.Event | None = None) -> None:
             # Awaited to completion before the next cycle: run_pending_crawls
             # shares the same single-flight precondition as run_pending.
             await _crawl_tick()
-        except Exception:  # noqa: BLE001 - un tick malo no puede matar el loop
+        except Exception:  # noqa: BLE001 - a bad tick must not kill the loop
             logger.exception("crawl tick failed; retrying after the poll interval")
         with suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), timeout=_CRAWL_POLL_INTERVAL_SECONDS)
@@ -167,16 +170,16 @@ async def _sweep_tick() -> None:
             max_retention_hours=_settings.max_retention_hours,
         )
     if freed:
-        logger.info("liberados %s archivos del servidor", freed)
+        logger.info("freed %s files from the server", freed)
 
 
 async def _sweep_loop(stop: asyncio.Event | None = None) -> None:
-    """Mismo contrato que los otros loops; ver _scheduler_loop."""
+    """Same contract as the other loops; see _scheduler_loop."""
     stop = stop or asyncio.Event()
     while not stop.is_set():
         try:
             await _sweep_tick()
-        except Exception:  # noqa: BLE001 - un barrido fallido no puede matar el loop
+        except Exception:  # noqa: BLE001 - a failed sweep must not kill the loop
             logger.exception("sweep tick failed; retrying after the interval")
         with suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), timeout=_SWEEP_INTERVAL_SECONDS)
@@ -195,8 +198,8 @@ async def lifespan(app: FastAPI):
         # API unbootable for that window instead of just skipping the resume.
         logger.exception("startup resume of stale running items failed; continuing without it")
 
-    # Uno solo, compartido por ambos loops, para que apagar los despierte a los
-    # dos a la vez en lugar de que el segundo espere a que venza su intervalo.
+    # One event shared by every loop, so shutting down wakes them all at once
+    # instead of the later ones waiting out their interval.
     stop = asyncio.Event()
     tasks = []
     if _settings.scheduler_enabled:
@@ -226,3 +229,22 @@ app.include_router(ws_router)
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+# The SPA is served by the API itself when a build is present, which is how the
+# container image ships: one service, one port, no proxy in between. Under
+# docker compose nginx still does it, and running uvicorn from a checkout finds
+# no build here and leaves the frontend to the Vite dev server.
+#
+# Mounted last, after every router and after /health: Starlette matches routes
+# in the order they were added, so an earlier mount at "/" would swallow the
+# entire API. html=True makes "/" resolve to index.html.
+_static = Path(_settings.static_dir)
+if _static.is_dir():
+    # python:slim carries a minimal mime database that predates woff2, so the
+    # self-hosted fonts would go out as application/octet-stream. Browsers
+    # accept that for @font-face, but nothing downstream can reason about it.
+    mimetypes.add_type("font/woff2", ".woff2")
+    app.mount("/", StaticFiles(directory=_static, html=True), name="spa")
+else:
+    logger.info("no SPA build at %s; serving the API only", _static)

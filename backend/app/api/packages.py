@@ -148,8 +148,8 @@ async def download_item_file(
 
     path = _item_path(item)
     if item.file_removed_at is not None or not os.path.isfile(path):
-        # El servidor es un lugar de paso: una vez retirado, el archivo se
-        # libera. La fila queda en el historial, el archivo no.
+        # The server is a place to pass through: once retrieved, the file is
+        # freed. The row stays in the history, the file does not.
         raise HTTPException(
             status_code=410,
             detail="The file is no longer on the server. Add the link again to fetch it once more.",
@@ -237,8 +237,8 @@ async def delete_package(
         except FileNotFoundError:
             pass
         except OSError:
-            # No poder borrar un archivo no puede impedir sacar el paquete de
-            # la lista; el barrido lo va a reintentar.
+            # Failing to delete a file must not stop the package leaving the
+            # list; the sweep will retry it.
             logger.exception("no se pudo liberar %s", item.filename)
 
     await db.delete(package)

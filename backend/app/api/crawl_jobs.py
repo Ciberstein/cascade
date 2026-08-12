@@ -72,12 +72,12 @@ async def promote(
     db: AsyncSession = Depends(get_db),
     owner: str = Depends(get_owner),
 ):
-    """Convierte los resultados elegidos en un paquete descargable.
+    """Turns the chosen results into a downloadable package.
 
-    La copia es deliberada: los crawl_results son un hallazgo, los
-    download_items son trabajo comprometido. Mantenerlos separados es lo que
-    deja al scheduler con su contrato simple ("un item en queued es algo para
-    bajar") en vez de tener que filtrar filas a medio resolver.
+    The copy is deliberate: crawl_results are a finding, download_items are
+    committed work. Keeping them apart is what leaves the scheduler with its
+    simple contract ("a queued item is something to download") instead of
+    having to filter half-resolved rows.
     """
     owned = await db.execute(
         select(CrawlJob.id).where(CrawlJob.id == job_id, CrawlJob.owner_id == owner)
@@ -190,5 +190,5 @@ def _chosen_variant(found, variant_id: str | None) -> dict | None:
 
 
 def _download_root() -> str:
-    """Ver _target_dir_root en api/packages.py: es infraestructura, no ajuste."""
+    """See _target_dir_root in api/packages.py: infrastructure, not a setting."""
     return _settings.download_root

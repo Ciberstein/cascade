@@ -50,6 +50,38 @@ BIND_ADDRESS=0.0.0.0    # in .env
 
 Read [What isn't there yet](#what-isnt-there-yet) before you do.
 
+## Deploying it somewhere
+
+The root `Dockerfile` builds the whole thing into one image: the SPA is
+compiled and served by FastAPI itself, so there is one process on one port and
+no proxy in between. It is what platforms that deploy a single service from a
+repository expect — Railway, Fly, Render. `docker compose` keeps using the two
+per-service Dockerfiles with nginx in front, which is the right shape locally.
+
+On Railway specifically:
+
+1. New project → deploy from this repo. `railway.json` already selects the
+   Dockerfile builder and points the health check at `/health`.
+2. Add a **Postgres** database to the project.
+3. On the web service, set `DATABASE_URL` to reference it —
+   `${{Postgres.DATABASE_URL}}`. The app rewrites the scheme to asyncpg on the
+   way in, so the platform's variable works untouched.
+4. Attach a **volume mounted at `/downloads`**. Without it, a redeploy throws
+   away whatever was mid-flight. The engine resumes interrupted downloads, but
+   only if the partial file is still there.
+
+`PORT` is injected by the platform and the image honours it. Migrations run on
+boot.
+
+Sizing is the thing to watch: files pass through the disk on their way to the
+browser, so the volume has to fit the largest file you expect plus whatever is
+in flight, and every byte is paid for twice in egress — once fetching it, once
+handing it over.
+
+**Before putting it on a public URL, read the section at the end.** There is no
+login by design, and a public address turns each of those open edges into
+something anyone can reach.
+
 ## What's inside
 
 Three containers: `frontend` (nginx serving the SPA and proxying to the

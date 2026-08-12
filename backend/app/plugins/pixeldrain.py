@@ -30,7 +30,7 @@ class PixeldrainHoster:
             body = await self._get(f"{_BASE}/api/list/{list_match.group('id')}", url)
             return CrawlResult(
                 files=[
-                    # Cada entrada apunta a su propia URL de archivo: el motor
+                    # Each entry points at its own file URL: the engine
                     # descarga archivos, no colecciones.
                     CrawledFile(
                         url=f"{_BASE}/u/{entry['id']}",

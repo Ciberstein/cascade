@@ -1,0 +1,14 @@
+# Keeps the build context small and stops host artefacts leaking into the
+# image: a .venv built on Windows would break the Linux install, and a stale
+# frontend/dist would shadow the one the image builds itself.
+.git
+.claude
+.env
+docs
+
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.pyc

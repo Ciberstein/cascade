@@ -71,8 +71,8 @@ async def merge_ready_groups(db: AsyncSession) -> int:
             await db.commit()
             continue
 
-        # La parte de audio deja de existir: era un medio, no una descarga.
-        # El item de video pasa a ser el archivo final.
+        # The audio part stops existing: it was a means, not a download. The
+        # video item becomes the final file.
         video.downloaded_bytes += audio.downloaded_bytes
         video.total_size = (video.total_size or 0) + (audio.total_size or 0)
         video.merge_group = None
