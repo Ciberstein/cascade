@@ -32,8 +32,8 @@
   margin-top: 0.5rem;
 }
 
-/* Quien ya está registrado no necesita el formulario, solo saber con qué
-   nombre y qué gana con eso. */
+/* Someone already registered does not need the form, only to know under
+   which name and what it buys them. */
 .account__who {
   margin: 0 0 0.5rem;
   font-size: 0.95rem;

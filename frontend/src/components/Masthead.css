@@ -14,8 +14,8 @@
   gap: 0.65rem;
 }
 
-/* El mismo riel que mide cada descarga, a escala de logo. La marca es el
-   mecanismo. */
+/* The same rail that measures every download, at logo scale. The mark is the
+   mechanism. */
 .masthead__rail {
   width: var(--rail-w);
   height: 1.35rem;
@@ -31,8 +31,8 @@
   text-transform: uppercase;
 }
 
-/* La frase pesa más que la marca a propósito: es lo que hay que entender al
-   llegar, y la marca ya está firmada arriba. */
+/* The sentence outweighs the wordmark on purpose: it is what has to land on
+   arrival, and the brand is already signed above it. */
 .masthead__note {
   margin: 0.5rem 0 0;
   max-width: 42ch;

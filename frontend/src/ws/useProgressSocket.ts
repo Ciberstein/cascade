@@ -7,7 +7,7 @@ interface ProgressMessage {
   downloaded_bytes: number
 }
 
-/** Cierre del backend cuando falta el token de dueño o es inválido. */
+/** The backend's close code when the owner token is missing or invalid. */
 const INVALID_OWNER_CLOSE_CODE = 4401
 
 const RECONNECT_DELAY_MS = 2000
@@ -33,8 +33,8 @@ export function useProgressSocket() {
 
     function connect() {
       const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      // El token va por query string: la API de WebSocket del navegador no
-      // permite mandar cabeceras propias en el handshake.
+      // The token travels in the query string: the browser's WebSocket API
+      // cannot send headers of its own during the handshake.
       const socket = new WebSocket(
         `${protocol}://${window.location.host}/ws?owner=${encodeURIComponent(ownerToken())}`,
       )
@@ -50,9 +50,9 @@ export function useProgressSocket() {
       socket.onclose = (event) => {
         if (disposed) return
         if (event.code === INVALID_OWNER_CLOSE_CODE) {
-          // Reintentar con el mismo token fallaría igual; el error queda
-          // visible en consola y el resto de la app sigue por sondeo.
-          console.error('el servidor rechazó el identificador de este navegador')
+          // Retrying with the same token would fail the same way; the error
+          // stays visible in the console and the rest of the app keeps polling.
+          console.error("the server rejected this browser's identifier")
           return
         }
         reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS)

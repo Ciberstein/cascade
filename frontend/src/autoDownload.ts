@@ -2,29 +2,29 @@ import { fileUrl } from './api/packages'
 import type { Package } from './types'
 
 /**
- * Dispara en el navegador la descarga de lo que acaba de terminar.
+ * Tells the browser to fetch whatever just finished.
  *
- * El navegador solo puede guardar archivos con la pestaña abierta, así que
- * esto corre en cada sondeo del dashboard. `retrieved` viene del servidor y es
- * lo que evita repetirlo: en cuanto la request llega, el item queda marcado y
- * el próximo sondeo ya no lo incluye. El Set local cubre la ventana entre que
- * se dispara y que el servidor contesta, donde un sondeo intermedio lo
- * dispararía de nuevo.
+ * The browser can only save files while the tab is open, so this runs on every
+ * dashboard poll. `retrieved` comes from the server and is what stops it
+ * repeating: as soon as the request lands the item is marked, and the next poll
+ * no longer includes it. The local Set covers the window between firing and the
+ * server answering, where an intervening poll would fire it again.
  *
- * Bajar varios seguidos hace que el navegador pida permiso una vez ("¿Descargar
- * varios archivos?"). Es del navegador, no algo que se pueda evitar desde acá.
+ * Several downloads in a row make the browser ask for permission once
+ * ("Download multiple files?"). That belongs to the browser and cannot be
+ * avoided from here.
  */
 export function autoDownloadFinished(packages: Package[], alreadyTriggered: Set<string>): void {
   for (const pkg of packages) {
     for (const item of pkg.items) {
-      const pendiente =
+      const pending =
         item.status === 'completed' &&
         !item.retrieved &&
         !item.file_removed &&
         item.merge_role !== 'audio' &&
         !alreadyTriggered.has(item.id)
 
-      if (!pendiente) continue
+      if (!pending) continue
 
       alreadyTriggered.add(item.id)
       trigger(fileUrl(pkg.id, item.id), item.filename)
@@ -33,9 +33,9 @@ export function autoDownloadFinished(packages: Package[], alreadyTriggered: Set<
 }
 
 function trigger(href: string, filename: string): void {
-  // Un <a download> sintético y no window.location: location navegaría la
-  // pestaña si el servidor no mandara Content-Disposition, y acá pueden
-  // dispararse varios seguidos.
+  // A synthetic <a download> rather than window.location: location would
+  // navigate the tab if the server ever failed to send Content-Disposition,
+  // and several of these can fire in a row.
   const link = document.createElement('a')
   link.href = href
   link.download = filename

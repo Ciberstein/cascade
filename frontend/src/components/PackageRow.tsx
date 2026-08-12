@@ -8,7 +8,7 @@ import './PackageRow.css'
 
 interface Props {
   package: Package
-  /** Conteos vivos del socket, más frescos que los persistidos. */
+  /** Live counts from the socket, fresher than the persisted ones. */
   progressByItemId?: Record<string, number>
   onPause: (id: string) => void
   onResume: (id: string) => void
@@ -31,9 +31,9 @@ export default function PackageRow({
   onOpen,
 }: Props) {
   const totalSize = pkg.items.reduce((sum, i) => sum + (i.total_size ?? 0), 0)
-  // El valor del socket gana: item.downloaded_bytes se guarda cada varios
-  // segundos, así que un refetch a mitad de descarga tiraría el riel hacia
-  // atrás, hasta el último checkpoint.
+  // The socket value wins: item.downloaded_bytes is checkpointed every few
+  // seconds, so a refetch mid-download would pull the rail backwards to the
+  // last checkpoint.
   const downloaded = pkg.items.reduce(
     (sum, i) => sum + Math.max(i.downloaded_bytes, progressByItemId[i.id] ?? 0),
     0,
@@ -41,23 +41,23 @@ export default function PackageRow({
   const percent = percentOf(downloaded, totalSize)
   const finished = FINISHED.has(pkg.status)
 
-  // Lo que el usuario todavía puede llevarse. La pista de audio de una unión
-  // no cuenta: no es un archivo que pidió.
+  // What the user can still take away. The audio track of a merge doesn't
+  // count: it isn't a file they asked for.
   const own = pkg.items.filter((i) => i.merge_role !== 'audio')
   const retrievable = own.filter((i) => i.status === 'completed' && !i.file_removed)
 
-  // Todo terminó y el servidor ya no guarda nada de este paquete. Es el estado
-  // que define a Cascade, así que se dice con todas las letras en vez de
-  // dejar la fila en un "listo" que sugiere que el archivo sigue ahí.
+  // Everything finished and the server holds nothing of this package any more.
+  // It is the state that defines Cascade, so it gets said outright instead of
+  // leaving the row on a "done" that suggests the file is still there.
   const released =
     own.length > 0 &&
     own.every((i) => i.status === 'completed') &&
     own.every((i) => i.file_removed)
 
-  // El primero que vuelve es el que define cuándo el paquete se mueve otra vez.
-  // Solo cuenta un item que siga esperando de verdad: sin filtrar por estado y
-  // por vencimiento, un item que ya terminó anunciaría una espera para siempre,
-  // y una marca vieja taparía la espera real de un item hermano.
+  // The earliest one back is what decides when the package moves again. Only an
+  // item that is genuinely still waiting counts: without filtering by status and
+  // by expiry, an item that already finished would announce a wait forever, and
+  // a stale mark would hide a sibling's real one.
   const now = Date.now()
   const waitingUntil = pkg.items
     .filter((i) => i.status === 'queued' && i.retry_after !== null)
@@ -69,7 +69,7 @@ export default function PackageRow({
 
   return (
     <article className="row">
-      <FlowRail percent={percent} state={state} label={`Progreso de ${pkg.name}`} />
+      <FlowRail percent={percent} state={state} label={`Progress of ${pkg.name}`} />
 
       <div className="row__body">
         <div className="row__head">
@@ -86,7 +86,7 @@ export default function PackageRow({
         <p className="row__meter">
           <span className="row__pct">{Math.round(percent)}%</span>
           {released ? (
-            <span className="row__gone">entregado · el servidor soltó su copia</span>
+            <span className="row__gone">delivered · the server let its copy go</span>
           ) : (
             <span>
               {formatBytes(downloaded)} / {formatBytes(totalSize || null)}
@@ -94,53 +94,55 @@ export default function PackageRow({
           )}
           {waitingUntil && (
             <span className="row__note">
-              esperando hasta{' '}
+              waiting until{' '}
               {new Date(waitingUntil).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
         </p>
 
         <div className="row__actions">
-          {/* En la lista y no solo en el detalle: es acá donde el usuario mira
-              cuando una descarga termina, y sin esto el archivo se queda en el
-              servidor hasta que el barrido lo borra sin que nadie lo haya
-              recibido. */}
+          {/* In the list and not only in the detail view: this is where people
+              look when a download finishes, and without it the file sits on the
+              server until the sweep deletes it without anyone receiving it. */}
           {retrievable.length === 1 && (
             <a
               className="row__take"
               href={fileUrl(pkg.id, retrievable[0].id)}
               download={retrievable[0].filename}
             >
-              Descargar
+              Download
             </a>
           )}
           {retrievable.length > 1 && onOpen && (
             <button className="row__take" onClick={() => onOpen(pkg.id)}>
-              Descargar {retrievable.length} archivos
+              Download {retrievable.length} files
             </button>
           )}
           {pkg.status === 'running' && (
             <button className="row__ctrl" onClick={() => onPause(pkg.id)}>
-              Pausar
+              Pause
             </button>
           )}
           {pkg.status === 'paused' && (
             <button className="row__ctrl" onClick={() => onResume(pkg.id)}>
-              Reanudar
+              Resume
             </button>
           )}
+          {/* "Stop" and not "Cancel": it sits next to Pause and has to read as
+              the permanent one, and a dialog's dismiss button is also called
+              Cancel - two of those on screen mean two different things. */}
           {!finished && (
             <button className="row__ctrl row__ctrl--danger" onClick={() => onCancel(pkg.id)}>
-              Cancelar
+              Stop
             </button>
           )}
-          {/* La fila solo avisa la intención: quién pregunta y con qué palabras
-              lo decide el Dashboard, que es donde viven los diálogos. */}
+          {/* The row only announces the intention: who asks, and in what words,
+              is decided by the Dashboard, where the dialogs live. */}
           <button className="row__ctrl" onClick={() => onRename(pkg.id)}>
-            Renombrar
+            Rename
           </button>
           <button className="row__ctrl row__ctrl--danger" onClick={() => onDelete(pkg.id)}>
-            Eliminar
+            Remove
           </button>
         </div>
       </div>
@@ -148,13 +150,13 @@ export default function PackageRow({
   )
 }
 
-/** Traduce el estado del paquete al del caudal, que distingue más matices. */
+/** Maps the package status onto the flow, which draws more distinctions. */
 function flowOf(status: string, ctx: { released: boolean; waiting: boolean }): Flow {
   if (status === 'error') return 'failed'
   if (status === 'paused') return 'stalled'
   if (status === 'completed') return ctx.released ? 'released' : 'done'
-  // Una espera pedida por el hoster no es un fallo ni una pausa del usuario,
-  // pero sí es caudal detenido: se pinta como tal.
+  // A wait the hoster asked for is neither a failure nor a pause the user
+  // chose, but it is stopped flow, so it is painted as such.
   if (ctx.waiting) return 'stalled'
   if (status === 'running') return 'running'
   return 'queued'

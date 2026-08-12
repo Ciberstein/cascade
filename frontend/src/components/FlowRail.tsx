@@ -1,26 +1,26 @@
 import './FlowRail.css'
 
 /**
- * Estado del caudal, que no es lo mismo que el estado del paquete.
+ * The state of the flow, which is not the same as the state of the package.
  *
- * 'stalled' es la espera de un hoster que pidió tiempo, y 'released' es lo que
- * distingue a Cascade de cualquier otro gestor: el archivo ya se entregó y el
- * servidor borró su copia, así que el riel se vacía.
+ * 'stalled' is a hoster that asked for time, and 'released' is what sets
+ * Cascade apart from any other download manager: the file has been handed over
+ * and the server deleted its copy, so the rail empties.
  */
 export type Flow = 'queued' | 'running' | 'stalled' | 'done' | 'released' | 'failed'
 
 interface Props {
   percent: number
   state: Flow
-  /** Qué mide este riel, para quien no lo ve. */
+  /** What this rail measures, for anyone who can't see it. */
   label: string
 }
 
 export default function FlowRail({ percent, state, label }: Props) {
   const clamped = Math.max(0, Math.min(100, percent))
-  // Vaciarlo es la lectura correcta: el riel mide lo que el servidor tiene en
-  // la mano, y tras la entrega no tiene nada. La transición de altura hace el
-  // resto sola cuando el sondeo trae el cambio.
+  // Emptying it is the correct reading: the rail measures what the server is
+  // holding, and after delivery it holds nothing. The height transition does
+  // the rest on its own once the poll brings the change in.
   const filled = state === 'released' ? 0 : clamped
 
   return (

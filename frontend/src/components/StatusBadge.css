@@ -1,6 +1,6 @@
-/* Estado en versaleta ancha con una marca cuadrada delante. Sin píldora: el
-   color y la marca ya separan el estado del resto, y una cápsula alrededor de
-   cada fila convierte la lista en un tablero de etiquetas. */
+/* Status in wide small caps with a square mark in front. No pill: the colour
+   and the mark already set the status apart, and a capsule around every row
+   turns the list into a board of labels. */
 .status {
   display: inline-flex;
   align-items: center;

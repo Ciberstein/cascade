@@ -2,10 +2,10 @@ import type { ReactNode } from 'react'
 import './Masthead.css'
 
 interface Props {
-  /** Línea bajo la marca. Solo la pantalla principal la usa: en las de paso
-   *  ya se sabe dónde se está, y repetirla sería ruido. */
+  /** Line under the wordmark. Only the main screen uses it: on the screens you
+   *  pass through you already know where you are, and repeating it is noise. */
   note?: string
-  /** Navegación de la derecha: cambia según la pantalla. */
+  /** Navigation on the right; changes per screen. */
   children?: ReactNode
 }
 

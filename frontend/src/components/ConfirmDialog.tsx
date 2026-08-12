@@ -2,9 +2,9 @@ import Modal from './Modal'
 
 interface Props {
   title: string
-  /** Qué pasa si sigue adelante, en una frase. */
+  /** What happens if they go ahead, in one sentence. */
   body: string
-  /** El botón dice la acción, no "Aceptar": se lee solo antes de hacer clic. */
+  /** The button states the action, not "OK": it reads on its own before the click. */
   confirmLabel: string
   destructive?: boolean
   onConfirm: () => void
@@ -26,9 +26,9 @@ export default function ConfirmDialog({
       onClose={onCancel}
       actions={
         <>
-          {/* Cancelar va primero en el DOM y por eso se lleva el foco al abrir:
-              en un diálogo que destruye algo, Enter no puede confirmar de una. */}
-          <button onClick={onCancel}>Cancelar</button>
+          {/* Cancel comes first in the DOM and therefore takes focus on open:
+              in a dialog that destroys something, Enter cannot confirm. */}
+          <button onClick={onCancel}>Cancel</button>
           <button className={destructive ? 'destructive' : 'primary'} onClick={onConfirm}>
             {confirmLabel}
           </button>

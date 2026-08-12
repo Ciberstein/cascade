@@ -19,7 +19,7 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const selectionInitialized = useRef(false)
   const [name, setName] = useState('')
-  // Calidad elegida por resultado; lo que no esté acá usa la mejor.
+  // Quality chosen per result; anything not here uses the best available.
   const [quality, setQuality] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -30,19 +30,19 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
     try {
       const fetched = await getCrawlJob(jobId)
       setJob(fetched)
-      // Los muertos quedan visibles pero fuera de la selección: tildarlos solo
-      // encola un fallo garantizado.
+      // Dead links stay visible but out of the selection: ticking one only
+      // queues a guaranteed failure.
       //
-      // La marca explícita, y no "prev.size > 0": mientras el job corre el
-      // sondeo sigue activo, así que usar "está vacío" como sinónimo de "sin
-      // inicializar" hace que destildar la última casilla vuelva a tildarlas
-      // todas un segundo después.
+      // An explicit flag rather than "prev.size > 0": while the job runs the
+      // poll stays active, so treating "empty" as a synonym for "not yet
+      // initialised" makes unticking the last box re-tick them all a second
+      // later.
       if (!selectionInitialized.current && fetched.results.length > 0) {
         selectionInitialized.current = true
         setSelected(new Set(fetched.results.filter((r) => r.status === 'ok').map((r) => r.id)))
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo cargar el análisis')
+      setError(e instanceof Error ? e.message : 'Could not load the results')
     }
   }, [jobId])
 
@@ -51,7 +51,7 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
   }, [refresh])
 
   useEffect(() => {
-    // Un job terminado no cambia más; seguir sondeándolo es tráfico puro.
+    // A finished job never changes; polling it further is pure traffic.
     if (finished) return
     const timer = setInterval(() => void refresh(), POLL_INTERVAL_MS)
     return () => clearInterval(timer)
@@ -71,10 +71,10 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
     setSubmitting(true)
     setError(null)
     try {
-      await promoteResults(jobId, name.trim() || 'Paquete sin nombre', [...selected], quality)
+      await promoteResults(jobId, name.trim() || 'Untitled package', [...selected], quality)
       onDone()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo crear el paquete')
+      setError(err instanceof Error ? err.message : 'Could not create the package')
     } finally {
       setSubmitting(false)
     }
@@ -82,31 +82,31 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
 
   return (
     <>
-      {/* Fuera del form a propósito: un <button> sin type dentro de un form lo
-          envía, y "Volver" encolaría el paquete. */}
+      {/* Outside the form on purpose: a <button> with no type inside a form
+          submits it, and "Back" would queue the package. */}
       <Masthead>
-        <button onClick={onBack}>Volver</button>
+        <button onClick={onBack}>Back</button>
       </Masthead>
 
       <form onSubmit={handleSubmit}>
         <ol className="stages">
-          <li>pegar</li>
+          <li>paste</li>
           <li className="stages__arrow" aria-hidden="true">
             →
           </li>
           <li className="stages__step--now" aria-current="step">
-            elegir
+            choose
           </li>
           <li className="stages__arrow" aria-hidden="true">
             →
           </li>
-          <li>recibir</li>
+          <li>receive</li>
         </ol>
 
-        <h1 className="grabber__title">Elegí qué se descarga</h1>
+        <h1 className="grabber__title">Choose what to download</h1>
         <p className="grabber__lede">
-          Esto es lo que hay detrás de los enlaces que pegaste. Destildá lo que no quieras y, en los
-          videos, elegí con qué calidad bajarlos.
+          This is what sits behind the links you pasted. Untick anything you don't want and, for
+          videos, pick the quality to fetch.
         </p>
 
         {error && (
@@ -115,13 +115,13 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
           </p>
         )}
 
-        {!finished && <p className="grabber__pending">Buscando qué hay detrás de los enlaces…</p>}
+        {!finished && <p className="grabber__pending">Looking at what is behind those links…</p>}
 
-        {/* Un job que murió dejaba la pantalla en silencio: sin la lista y sin
-            el "Buscando…", no quedaba nada que explicara la lista vacía. */}
+        {/* A job that died left the screen silent: with no list and no
+            "Looking at…", nothing explained why it was empty. */}
         {job?.status === 'error' && (
           <p className="notice grabber__error" role="alert">
-            {job.error_message ?? 'La búsqueda no terminó. Probá de nuevo con esos enlaces.'}
+            {job.error_message ?? 'The search did not finish. Try those links again.'}
           </p>
         )}
 
@@ -157,7 +157,7 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
                       {result.variants.length > 0 ? (
                         <select
                           className="result__quality"
-                          aria-label={`Calidad de ${result.filename}`}
+                          aria-label={`Quality for ${result.filename}`}
                           value={quality[result.id] ?? result.variants[0].id}
                           onChange={(e) =>
                             setQuality((prev) => ({
@@ -188,17 +188,17 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
         )}
 
         {finished && job?.results.length === 0 && (
-          <p className="grabber__pending">No se encontró ningún archivo detrás de esos enlaces.</p>
+          <p className="grabber__pending">No files were found behind those links.</p>
         )}
 
         <div className="grabber__foot">
           <div className="grabber__field">
             <label className="eyebrow" htmlFor="pkg-name">
-              Nombre del paquete
+              Package name
             </label>
             <input
               id="pkg-name"
-              placeholder="Paquete sin nombre"
+              placeholder="Untitled package"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -209,7 +209,7 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
               {selected.size} de {job?.results.length ?? 0}
             </span>
             <button type="submit" className="primary" disabled={selected.size === 0 || submitting}>
-              Agregar a la cola
+              Add to queue
             </button>
           </div>
         </div>

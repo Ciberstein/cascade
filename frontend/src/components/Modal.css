@@ -6,8 +6,8 @@
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  /* Fijo y no tokenizado: es el fondo del canal visto a través del agua, y
-     tiene que oscurecer tanto el tema claro como el oscuro. */
+  /* Fixed rather than tokenised: it is the channel bed seen through water,
+     and it has to darken both the light and the dark theme. */
   background: rgba(6, 19, 22, 0.55);
   animation: modal-wash 0.18s ease-out;
 }
@@ -26,8 +26,8 @@
   animation: modal-rise 0.18s ease-out;
 }
 
-/* El mismo riel de la app, acá pintado del color de lo que se va a hacer:
-   caudal si es una edición, óxido si algo se va a perder. */
+/* The app's rail, painted here in the colour of what is about to happen:
+   flow for an edit, rust when something will be lost. */
 .modal__rail {
   border-radius: 1px;
   background: linear-gradient(to bottom, var(--flow-lit), var(--flow));

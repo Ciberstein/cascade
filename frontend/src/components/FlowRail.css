@@ -1,8 +1,8 @@
-/* El medidor de Cascade cae, no avanza.
+/* Cascade's meter falls; it does not advance.
  *
- * Un riel por fila, todos alineados en la misma canaleta: la lista entera se
- * lee de un vistazo como una columna de caudales sin leer una sola cifra. Las
- * cifras exactas viven al lado, en texto, que es donde se leen mejor.
+ * One rail per row, all lined up in the same channel: the whole list reads at
+ * a glance as a column of flows without reading a single figure. The exact
+ * figures live beside it, in text, which is where they read best.
  */
 
 .rail {
@@ -11,8 +11,8 @@
   min-height: 2.5rem;
   border-radius: 1px;
   overflow: hidden;
-  /* Lo que todavía no llegó se ve como una escala punteada, no como un vacío:
-     el riel siempre declara cuánto falta. */
+  /* What hasn't arrived yet reads as a dotted scale rather than a void: the
+     rail always states how much is left. */
   background-image: repeating-linear-gradient(
     to bottom,
     var(--edge) 0 3px,
@@ -26,14 +26,14 @@
   left: 0;
   right: 0;
   background: var(--flow);
-  /* El caudal llega en pasos de ~500 ms; interpolar entre ellos se lee como
-     movimiento en vez de como saltos. La misma transición es la que vacía el
-     riel cuando el servidor entrega el archivo y borra su copia. */
+  /* The flow arrives in ~500 ms steps; easing between them reads as motion
+     rather than jumps. The same transition is what empties the rail when the
+     server hands the file over and deletes its copy. */
   transition: height var(--beat) linear, background-color var(--beat);
 }
 
-/* Borde de ataque: la lámina de luz donde el agua todavía está entrando. Solo
-   mientras baja - en un archivo detenido sería decoración. */
+/* Leading edge: the sheet of light where water is still coming in. Only while
+   it descends - on a stopped file it would be decoration. */
 .rail--running .rail__fill::after {
   content: '';
   position: absolute;

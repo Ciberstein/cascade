@@ -16,7 +16,7 @@ test('apiFetch returns parsed json', async () => {
 
   const result = await apiFetch('/health')
 
-  // Ya no viaja ninguna cookie de sesión: la identidad es la cabecera de dueño.
+  // No session cookie travels any more: the identity is the owner header.
   expect(mockFetch).toHaveBeenCalledWith('/health', expect.objectContaining({ headers: expect.any(Object) }))
   expect(result).toEqual({ hello: 'world' })
 })
@@ -27,8 +27,8 @@ test('apiFetch sends the browser owner token', async () => {
 
   await apiFetch('/packages')
 
-  // Sin login, esta cabecera es lo único que le dice al servidor de quién son
-  // las descargas que tiene que devolver.
+  // With no login, this header is the only thing telling the server whose
+  // downloads it should return.
   const headers = mockFetch.mock.calls[0][1].headers
   expect(headers['X-Cascade-Owner']).toMatch(/^[0-9a-f]{32}$/)
 })

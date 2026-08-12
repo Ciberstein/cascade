@@ -16,7 +16,7 @@ const doneJob: CrawlJob = {
   error_message: null,
   results: [
     { id: 'r1', url: 'http://x/a.zip', filename: 'a.zip', size: 1024, hoster: 'direct', status: 'ok', error_message: null, variants: [] },
-    { id: 'r2', url: 'http://x/b.zip', filename: 'b.zip', size: null, hoster: 'direct', status: 'dead', error_message: 'no existe', variants: [] },
+    { id: 'r2', url: 'http://x/b.zip', filename: 'b.zip', size: null, hoster: 'direct', status: 'dead', error_message: 'does not exist', variants: [] },
   ],
 }
 
@@ -36,8 +36,8 @@ test('dead links are shown but not selected', async () => {
   render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)
   await screen.findByText('a.zip')
 
-  // Verlos importa: dicen qué se perdió de la lista pegada. Tildarlos solo
-  // encolaría un fallo garantizado.
+  // Seeing them matters: they say what dropped out of the pasted list.
+  // Ticking one would only queue a guaranteed failure.
   expect(screen.getByLabelText('a.zip')).toBeChecked()
   expect(screen.getByLabelText('b.zip')).not.toBeChecked()
   expect(screen.getByLabelText('b.zip')).toBeDisabled()
@@ -53,8 +53,8 @@ test('promotes only the checked results', async () => {
   render(<LinkGrabber jobId="j1" onDone={onDone} onBack={vi.fn()} />)
   await screen.findByText('a.zip')
 
-  fireEvent.change(screen.getByLabelText('Nombre del paquete'), { target: { value: 'Mi paquete' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Agregar a la cola' }))
+  fireEvent.change(screen.getByLabelText('Package name'), { target: { value: 'Mi paquete' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
 
   await waitFor(() => expect(promote).toHaveBeenCalledWith('j1', 'Mi paquete', ['r1'], {}))
   await waitFor(() => expect(onDone).toHaveBeenCalled())
@@ -69,7 +69,7 @@ test('keeps polling while the job is still running', async () => {
 
   render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)
 
-  await vi.waitFor(() => expect(screen.getByText(/Buscando/)).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByText(/Looking at/)).toBeInTheDocument())
   await vi.advanceTimersByTimeAsync(2000)
 
   await vi.waitFor(() => expect(screen.getByText('a.zip')).toBeInTheDocument())
@@ -86,7 +86,7 @@ test('stops polling once the job is done', async () => {
   const callsWhenDone = get.mock.calls.length
   await vi.advanceTimersByTimeAsync(10000)
 
-  // Un job terminado no cambia más; seguir sondeándolo es tráfico puro.
+  // A finished job never changes; polling it further is pure traffic.
   expect(get.mock.calls.length).toBe(callsWhenDone)
 })
 
@@ -99,7 +99,7 @@ test('submit is disabled when nothing is selected', async () => {
   render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)
   await screen.findByText('b.zip')
 
-  expect(screen.getByRole('button', { name: 'Agregar a la cola' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Add to queue' })).toBeDisabled()
 })
 
 test('a video offers its qualities and sends the chosen one', async () => {
@@ -122,16 +122,16 @@ test('a video offers its qualities and sends the chosen one', async () => {
   })
 
   render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)
-  const selector = await screen.findByLabelText('Calidad de video.mp4')
+  const selector = await screen.findByLabelText('Quality for video.mp4')
 
-  // La mejor viene preseleccionada: quien no elige espera la mejor.
+  // The best one comes preselected: whoever doesn't choose expects the best.
   expect(selector).toHaveValue('299')
 
   fireEvent.change(selector, { target: { value: '18' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Agregar a la cola' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Add to queue' }))
 
   await waitFor(() =>
-    expect(promote).toHaveBeenCalledWith('j1', 'Paquete sin nombre', ['r1'], { r1: '18' }),
+    expect(promote).toHaveBeenCalledWith('j1', 'Untitled package', ['r1'], { r1: '18' }),
   )
 })
 
@@ -141,6 +141,6 @@ test('something that is not a video shows its size instead of a picker', async (
   render(<LinkGrabber jobId="j1" onDone={vi.fn()} onBack={vi.fn()} />)
   await screen.findByText('a.zip')
 
-  expect(screen.queryByLabelText(/Calidad de/)).not.toBeInTheDocument()
+  expect(screen.queryByLabelText(/Quality for/)).not.toBeInTheDocument()
   expect(screen.getByText('1.0 KB')).toBeInTheDocument()
 })

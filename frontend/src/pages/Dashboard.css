@@ -17,8 +17,8 @@
   margin: 1rem 0 0;
 }
 
-/* El canal vacío es un riel vacío: la misma canaleta punteada que van a
-   ocupar las descargas, en vez de una caja de guiones que no dice nada. */
+/* An empty channel is an empty rail: the same dotted groove the downloads
+   will occupy, instead of a dashed box that says nothing. */
 .channel__empty {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;

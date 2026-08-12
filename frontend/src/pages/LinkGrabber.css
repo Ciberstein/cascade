@@ -1,6 +1,7 @@
-/* Pegar, elegir, recibir es una secuencia real, así que acá sí vale marcarla:
-   quien llega a esta pantalla está en el medio de algo y conviene decirle
-   dónde. En el resto de la app no aparece, porque no habría nada que marcar. */
+/* Paste, choose, receive is a real sequence, so marking it here is earned:
+   whoever reaches this screen is in the middle of something and deserves to
+   know where. It appears nowhere else, because there would be nothing to
+   mark. */
 .stages {
   display: flex;
   align-items: center;
@@ -59,8 +60,9 @@
   transition: background var(--beat);
 }
 
-/* Lo elegido se levanta del fondo. Es la única señal que hace falta: la
-   casilla ya dice sí o no, esto dice cuánto vas a bajar de un vistazo. */
+/* What is selected rises off the background. It is the only signal needed:
+   the checkbox already says yes or no, this says how much you are about to
+   fetch at a glance. */
 .result--on {
   background: var(--panel);
 }
@@ -95,8 +97,8 @@
   white-space: nowrap;
 }
 
-/* Un enlace caído se ve caído. Sigue en la lista porque explica por qué no se
-   puede tildar, pero no se disfraza de opción. */
+/* A dead link looks dead. It stays in the list because it explains why it
+   cannot be ticked, but it does not disguise itself as an option. */
 .result--dead .result__name {
   color: var(--slate);
   text-decoration: line-through;

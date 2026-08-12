@@ -3,28 +3,28 @@ import './StatusBadge.css'
 type Tone = 'muted' | 'flow' | 'done' | 'warn' | 'fail'
 
 /**
- * El mismo verbo en inglés significa cosas distintas según qué se esté
- * mirando: un paquete "running" está bajando, un análisis "running" está
- * buscando. Por eso el vocabulario se elige por contexto y no por estado.
+ * The same verb means different things depending on what you are looking at: a
+ * "running" package is downloading, a "running" analysis is searching. So the
+ * vocabulary is chosen by context, not by status alone.
  */
 type Kind = 'transfer' | 'search'
 
 const TRANSFER: Record<string, [string, Tone]> = {
-  queued: ['en cola', 'muted'],
-  running: ['bajando', 'flow'],
-  paused: ['en pausa', 'warn'],
-  completed: ['listo', 'done'],
-  error: ['falló', 'fail'],
-  canceled: ['cancelado', 'muted'],
+  queued: ['queued', 'muted'],
+  running: ['downloading', 'flow'],
+  paused: ['paused', 'warn'],
+  completed: ['done', 'done'],
+  error: ['failed', 'fail'],
+  canceled: ['canceled', 'muted'],
 }
 
 const SEARCH: Record<string, [string, Tone]> = {
-  pending: ['en cola', 'muted'],
-  running: ['buscando', 'flow'],
-  done: ['listo', 'done'],
-  error: ['falló', 'fail'],
-  ok: ['disponible', 'done'],
-  dead: ['caído', 'fail'],
+  pending: ['queued', 'muted'],
+  running: ['searching', 'flow'],
+  done: ['done', 'done'],
+  error: ['failed', 'fail'],
+  ok: ['available', 'done'],
+  dead: ['dead', 'fail'],
 }
 
 interface Props {
@@ -33,8 +33,8 @@ interface Props {
 }
 
 export default function StatusBadge({ status, kind = 'transfer' }: Props) {
-  // Un estado que el backend agregue y esta tabla no conozca se muestra crudo:
-  // preferible una palabra en inglés que una etiqueta que miente.
+  // A status the backend adds that this table doesn't know is shown raw: a word
+  // the UI doesn't understand beats a label that lies.
   const [label, tone] = (kind === 'search' ? SEARCH : TRANSFER)[status] ?? [status, 'muted']
 
   return (

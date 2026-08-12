@@ -45,7 +45,7 @@ export default function Settings({ onClose }: Props) {
         })
       })
       .catch((e: unknown) => {
-        setError(e instanceof Error ? e.message : 'No se pudo cargar la configuración')
+        setError(e instanceof Error ? e.message : 'Could not load the settings')
       })
   }, [])
 
@@ -53,7 +53,7 @@ export default function Settings({ onClose }: Props) {
     return (
       <>
         <Masthead>
-          <button onClick={onClose}>Volver</button>
+          <button onClick={onClose}>Back</button>
         </Masthead>
         {error ? (
           <p className="notice" role="alert">
@@ -70,7 +70,7 @@ export default function Settings({ onClose }: Props) {
 
     const parsed = parseNumeric(numeric)
     if (!parsed) {
-      setError('Revisá los campos numéricos: deben estar dentro de los rangos permitidos.')
+      setError('Check the numbers: each one has to sit inside its allowed range.')
       return
     }
 
@@ -81,7 +81,7 @@ export default function Settings({ onClose }: Props) {
       onClose()
     } catch (err) {
       // Stays open so the rejected values are still on screen to correct.
-      setError(err instanceof Error ? err.message : 'No se pudo guardar la configuración')
+      setError(err instanceof Error ? err.message : 'Could not save the settings')
     } finally {
       setSaving(false)
     }
@@ -89,21 +89,21 @@ export default function Settings({ onClose }: Props) {
 
   return (
     <>
-      {/* Sin "Volver" arriba: de acá se sale por Cancelar o por Guardar, y dos
-          salidas que hacen cosas distintas invitan a perder cambios. */}
+      {/* No "Back" up top: you leave here through Cancel or Save, and two
+          exits that do different things invite losing changes. */}
       <Masthead />
 
       <form onSubmit={handleSubmit}>
-        <h1 className="settings__title">Configuración</h1>
+        <h1 className="settings__title">Settings</h1>
         <p className="settings__lede">
-          Estos números gobiernan el motor entero, no solo tus descargas: mandan sobre todo lo que
-          el servidor esté bajando en este momento.
+          These numbers govern the whole engine, not just your downloads: they apply to
+          everything the server is fetching right now.
         </p>
 
         <NumberField
           id="max-concurrent"
-          label="Descargas simultáneas"
-          hint="Cuántos archivos baja el servidor a la vez. El resto espera en cola."
+          label="Simultaneous downloads"
+          hint="How many files the server fetches at once. The rest wait in the queue."
           field="max_concurrent_downloads"
           value={numeric.max_concurrent_downloads}
           onChange={setNumeric}
@@ -111,8 +111,8 @@ export default function Settings({ onClose }: Props) {
 
         <NumberField
           id="max-crawls"
-          label="Análisis simultáneos"
-          hint="Cuántas listas de enlaces se revisan a la vez antes de encolar nada."
+          label="Simultaneous checks"
+          hint="How many pasted lists are examined at once, before anything is queued."
           field="max_concurrent_crawls"
           value={numeric.max_concurrent_crawls}
           onChange={setNumeric}
@@ -120,8 +120,8 @@ export default function Settings({ onClose }: Props) {
 
         <NumberField
           id="chunks-per-file"
-          label="Chunks por archivo"
-          hint="En cuántos pedazos se parte cada archivo para pedirlos en paralelo. Más pedazos suele ser más rápido, salvo que el hoster lo penalice."
+          label="Chunks per file"
+          hint="How many pieces each file is split into so they can be fetched in parallel. More pieces is usually faster, unless the hoster penalises it."
           field="chunks_per_file"
           value={numeric.chunks_per_file}
           onChange={setNumeric}
@@ -129,8 +129,8 @@ export default function Settings({ onClose }: Props) {
 
         <NumberField
           id="max-speed"
-          label="Límite de velocidad"
-          hint="En KB/s, repartido entre todas las descargas. 0 es sin límite."
+          label="Speed limit"
+          hint="In KB/s, shared across every download. 0 means no limit."
           field="max_speed_kbps"
           value={numeric.max_speed_kbps}
           onChange={setNumeric}
@@ -144,10 +144,10 @@ export default function Settings({ onClose }: Props) {
 
         <div className="settings__actions">
           <button type="button" onClick={onClose}>
-            Cancelar
+            Cancel
           </button>
           <button type="submit" className="primary" disabled={saving}>
-            Guardar
+            Save
           </button>
         </div>
       </form>
@@ -158,7 +158,7 @@ export default function Settings({ onClose }: Props) {
 interface NumberFieldProps {
   id: string
   label: string
-  /** Qué hace el número. La etiqueta nombra; esto explica. */
+  /** What the number does. The label names; this explains. */
   hint: string
   field: NumericKey
   value: string

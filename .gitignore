@@ -1,2 +1,6 @@
-# Holds the real JWT secret and admin password.
+# Real database password and the bind address for this machine.
 .env
+
+# Local agent settings and session state. Machine-specific, and not something
+# a clone of this repo needs.
+.claude/

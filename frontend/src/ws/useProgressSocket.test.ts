@@ -91,8 +91,8 @@ test('stops reconnecting when the server rejects the owner token', async () => {
 
   renderHook(() => useProgressSocket())
 
-  // 4401 es el cierre del backend ante un token de dueño inválido. Reintentar
-  // con el mismo token fallaría igual.
+  // 4401 is the backend's close code for an invalid owner token. Retrying
+  // with the same token would fail the same way.
   act(() => {
     FakeWebSocket.instances[0].onclose?.({ code: 4401 })
   })

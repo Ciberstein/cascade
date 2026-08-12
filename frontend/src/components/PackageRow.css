@@ -1,6 +1,6 @@
-/* Filas separadas por una línea de pelo, no tarjetas flotantes: las tarjetas
-   convierten una lista en un tablero, y acá lo que importa es la columna de
-   rieles corriendo por el mismo eje de arriba a abajo. */
+/* Rows separated by a hairline, not floating cards: cards turn a list into a
+   board, and what matters here is the column of rails running down the same
+   axis. */
 .row {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
@@ -44,8 +44,8 @@
   text-underline-offset: 4px;
 }
 
-/* La lectura exacta va en texto, al lado del riel: los números se comparan
-   mejor leídos que estimados sobre una barra. */
+/* The exact reading goes in text beside the rail: numbers compare better read
+   than estimated off a bar. */
 .row__meter {
   display: flex;
   align-items: baseline;
@@ -78,8 +78,8 @@
   margin-top: 0.15rem;
 }
 
-/* Controles secundarios sin caja. Cinco botones enmarcados por fila apagan la
-   única acción que importa cuando algo termina, que es descargar. */
+/* Secondary controls without a box. Five framed buttons per row drown out the
+   one action that matters when something finishes, which is downloading. */
 .row__ctrl {
   padding: 0;
   border: none;
@@ -97,14 +97,14 @@
   text-decoration-color: currentColor;
 }
 
-/* Después del anterior a propósito: misma especificidad, gana el que va
-   último, y lo que destruye no se pinta del color del caudal. */
+/* After the previous rule on purpose: same specificity, last one wins, and
+   what destroys does not get painted the colour of the flow. */
 .row__ctrl--danger:hover:not(:disabled) {
   color: var(--fail);
   text-decoration-color: currentColor;
 }
 
-/* La entrega es el final del recorrido: es lo único que se ve como botón. */
+/* Delivery is the end of the journey: the only thing that looks like a button. */
 .row__take {
   padding: 0.38rem 0.8rem;
   border: 1px solid var(--flow);
@@ -117,9 +117,9 @@
   transition: background var(--beat), border-color var(--beat);
 }
 
-/* Con :not(:disabled) y no a secas: la variante de varios archivos es un
-   <button>, y `button:hover:not(:disabled)` de la base le gana a un
-   `.row__take:hover` pelado - dejaba el texto del color del fondo. */
+/* With :not(:disabled) rather than bare: the multi-file variant is a
+   <button>, and the base `button:hover:not(:disabled)` outranks a plain
+   `.row__take:hover` - it left the text the same colour as the background. */
 .row__take:hover:not(:disabled) {
   background: var(--flow-lit);
   border-color: var(--flow-lit);

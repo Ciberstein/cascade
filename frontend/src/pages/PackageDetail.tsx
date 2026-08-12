@@ -17,7 +17,7 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
   return (
     <>
       <Masthead>
-        <button onClick={onBack}>Volver</button>
+        <button onClick={onBack}>Back</button>
       </Masthead>
 
       <div className="detail__head">
@@ -26,19 +26,19 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
       </div>
 
       <p className="detail__where">
-        <span className="eyebrow">Carpeta de paso</span>
+        <span className="eyebrow">Staging folder</span>
         <span className="detail__path">{pkg.target_dir}</span>
       </p>
 
       <ul className="detail__items">
         {pkg.items
-          // La pista de audio de una calidad que se está uniendo no se lista:
-          // es un medio para conseguir el archivo, no un archivo que el
-          // usuario pidió. Su progreso sí cuenta en el riel del paquete.
+          // The audio track of a quality being merged isn't listed: it is a
+          // means to get the file, not a file the user asked for. Its progress
+          // does count towards the package rail.
           .filter((item) => item.merge_role !== 'audio')
           .map((item) => {
-            // Misma regla que en la lista: el valor del socket es más fresco
-            // que el último checkpoint guardado.
+            // Same rule as in the list: the socket value is fresher than the
+            // last checkpoint written to the database.
             const downloaded = Math.max(item.downloaded_bytes, progressByItemId[item.id] ?? 0)
             const percent = percentOf(downloaded, item.total_size ?? 0)
 
@@ -47,7 +47,7 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
                 <FlowRail
                   percent={percent}
                   state={flowOf(item)}
-                  label={`Progreso de ${item.filename}`}
+                  label={`Progress of ${item.filename}`}
                 />
 
                 <div className="item__body">
@@ -67,20 +67,20 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
 
                   {item.status === 'completed' && item.file_removed && (
                     <p className="item__gone">
-                      Ya lo bajaste; el servidor liberó su copia. Volvé a agregar el enlace si lo
-                      necesitás otra vez.
+                      You already took this one; the server let its copy go. Add the link again if
+                      you need it once more.
                     </p>
                   )}
 
                   {item.status === 'completed' && !item.file_removed && (
-                    // <a download> y no un botón: así lo baja el navegador y
-                    // queda en su carpeta de descargas, como cualquier otra.
+                    // <a download> rather than a button: this way the browser
+                    // performs the download and it lands in its usual folder.
                     <a
                       className="item__take"
                       href={fileUrl(pkg.id, item.id)}
                       download={item.filename}
                     >
-                      Descargar a mi equipo
+                      Download to my computer
                     </a>
                   )}
 
@@ -98,14 +98,14 @@ export default function PackageDetail({ package: pkg, progressByItemId = {}, onB
   )
 }
 
-/** Estado del riel de un archivo suelto. */
+/** The rail state for a single file. */
 function flowOf(item: DownloadItem): Flow {
   if (item.status === 'error') return 'failed'
-  // Pausado, cancelado y esperando son lo mismo para el riel: caudal detenido.
-  // Pintar un cancelado de rojo lo haría ver como algo que se rompió.
+  // Paused, canceled and waiting are the same thing to the rail: stopped flow.
+  // Painting a canceled item red would make it look like something broke.
   if (item.status === 'paused' || item.status === 'canceled') return 'stalled'
   if (item.status === 'completed') return item.file_removed ? 'released' : 'done'
   if (item.status === 'running') return 'running'
-  // Una espera pedida por el hoster no es un fallo: es caudal detenido.
+  // A wait the hoster asked for is not a failure: it is stopped flow.
   return item.retry_after ? 'stalled' : 'queued'
 }

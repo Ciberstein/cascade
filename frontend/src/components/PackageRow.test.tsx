@@ -40,8 +40,8 @@ test('renders package name, status, and aggregate progress', () => {
   render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
   expect(screen.getByText('My package')).toBeInTheDocument()
-  // El estado se muestra en el idioma de la interfaz, no como lo nombra la API.
-  expect(screen.getByText('bajando')).toBeInTheDocument()
+  // The status is shown in the interface's language, not the API's.
+  expect(screen.getByText('downloading')).toBeInTheDocument()
   // aggregate: (400 + 500) / (1000 + 500) = 60%
   expect(screen.getByText('60%')).toBeInTheDocument()
 })
@@ -81,9 +81,9 @@ test('offers pause while running and resume while paused', () => {
     <PackageRow package={pkg} onPause={onPause} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />,
   )
 
-  fireEvent.click(screen.getByRole('button', { name: 'Pausar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Pause' }))
   expect(onPause).toHaveBeenCalledWith('pkg-1')
-  expect(screen.queryByRole('button', { name: 'Reanudar' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Resume' })).not.toBeInTheDocument()
 
   const onResume = vi.fn()
   rerender(
@@ -97,9 +97,9 @@ test('offers pause while running and resume while paused', () => {
     />,
   )
 
-  fireEvent.click(screen.getByRole('button', { name: 'Reanudar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Resume' }))
   expect(onResume).toHaveBeenCalledWith('pkg-1')
-  expect(screen.queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
 })
 
 test('hides cancel once the package is finished', () => {
@@ -116,7 +116,7 @@ test('hides cancel once the package is finished', () => {
     />,
   )
 
-  expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
 })
 
 test('shows when a waiting item resumes instead of calling it an error', () => {
@@ -134,19 +134,19 @@ test('shows when a waiting item resumes instead of calling it an error', () => {
 
   render(<PackageRow package={waiting} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
-  // "Esto está agendado" y "esto se rompió" se confunden fácil, y la confusión
-  // hace que la gente cancele descargas que iban bien.
-  expect(screen.getByText(/esperando hasta/i)).toBeInTheDocument()
+  // "This is scheduled" and "this broke" are easy to confuse, and the
+  // confusion makes people kill downloads that were doing fine.
+  expect(screen.getByText(/waiting until/i)).toBeInTheDocument()
 })
 
 test('does not claim a wait when there is none', () => {
   render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
-  expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/waiting until/i)).not.toBeInTheDocument()
 })
 
 test('does not announce a wait for an item that already finished', () => {
-  // Un retry_after viejo sobre un item completado mostraba "esperando hasta"
-  // para siempre, y tapaba la espera real de un item hermano.
+  // A stale retry_after on a completed item showed "waiting until" forever,
+  // and hid a sibling's real wait.
   const stale: Package = {
     ...pkg,
     items: [
@@ -160,7 +160,7 @@ test('does not announce a wait for an item that already finished', () => {
 
   render(<PackageRow package={stale} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
-  expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/waiting until/i)).not.toBeInTheDocument()
 })
 
 test('does not announce a wait whose time already passed', () => {
@@ -178,16 +178,16 @@ test('does not announce a wait whose time already passed', () => {
 
   render(<PackageRow package={past} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
-  expect(screen.queryByText(/esperando hasta/i)).not.toBeInTheDocument()
+  expect(screen.queryByText(/waiting until/i)).not.toBeInTheDocument()
 })
 
 test('deleting says the downloaded file is kept', () => {
   const onDelete = vi.fn()
   render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={onDelete} onRename={noop} />)
 
-  fireEvent.click(screen.getByRole('button', { name: 'Eliminar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
 
-  // La confirmación vive en el Dashboard; la fila solo avisa la intención.
+  // The confirmation lives in the Dashboard; the row only announces intent.
   expect(onDelete).toHaveBeenCalledWith('pkg-1')
 })
 
@@ -196,10 +196,10 @@ test('renaming only announces the intention', () => {
 
   render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={onRename} />)
 
-  fireEvent.click(screen.getByRole('button', { name: 'Renombrar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
 
-  // Preguntar el nombre le toca al Dashboard, que es donde viven los diálogos.
-  // La fila no abre nada por su cuenta.
+  // Asking for the name is the Dashboard's job, which is where the dialogs
+  // live. The row opens nothing on its own.
   expect(onRename).toHaveBeenCalledWith('pkg-1')
 })
 
@@ -211,10 +211,10 @@ test('a finished package can still be renamed and deleted', () => {
     />,
   )
 
-  // Cancelar deja de tener sentido al terminar, pero limpiar la lista no.
-  expect(screen.queryByRole('button', { name: 'Cancelar' })).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Renombrar' })).toBeInTheDocument()
+  // Stopping stops making sense once it finishes; tidying the list doesn't.
+  expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Remove' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Rename' })).toBeInTheDocument()
 })
 
 test('a finished single-file package can be downloaded straight from the list', () => {
@@ -226,9 +226,9 @@ test('a finished single-file package can be downloaded straight from the list', 
 
   render(<PackageRow package={listo} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
-  // Es acá donde se mira cuando algo termina. Sin esto el archivo se queda en
-  // el servidor hasta que el barrido lo borra sin que nadie lo reciba.
-  const link = screen.getByRole('link', { name: 'Descargar' })
+  // This is where people look when something finishes. Without it the file
+  // sits on the server until the sweep deletes it, received by nobody.
+  const link = screen.getByRole('link', { name: 'Download' })
   expect(link).toHaveAttribute('href', '/packages/pkg-1/items/i1/file')
   expect(link).toHaveAttribute('download', 'a.zip')
 })
@@ -246,7 +246,7 @@ test('a package with several files sends you to the list of them', () => {
       onDelete={noop} onRename={noop} onOpen={onOpen} />,
   )
 
-  fireEvent.click(screen.getByRole('button', { name: 'Descargar 2 archivos' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Download 2 files' }))
   expect(onOpen).toHaveBeenCalledWith('pkg-1')
 })
 
@@ -259,5 +259,5 @@ test('a released file is not offered from the list either', () => {
 
   render(<PackageRow package={liberado} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
-  expect(screen.queryByRole('link', { name: 'Descargar' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Download' })).not.toBeInTheDocument()
 })

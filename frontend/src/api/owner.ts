@@ -1,15 +1,16 @@
 const STORAGE_KEY = 'cascade.owner'
 
 /**
- * Identidad anónima de este navegador.
+ * This browser's anonymous identity.
  *
- * No hay login: se entra y se usa. Este token es lo que le dice al servidor
- * qué descargas mostrar, y se genera la primera vez que se abre la app.
+ * There is no login: you arrive and you use it. This token is what tells the
+ * server which downloads to show, and it is generated the first time the app
+ * opens.
  *
- * Vive en localStorage, así que borrar los datos del sitio hace perder el
- * acceso a ese historial - las descargas siguen en el servidor, pero sin el
- * token no hay forma de reclamarlas. Registrar una cuenta, cuando exista, va a
- * ser justamente eso: poder recuperar este token desde otro dispositivo.
+ * It lives in localStorage, so clearing site data loses access to that history
+ * - the downloads stay on the server, but without the token there is no way to
+ * claim them. Registering an account is exactly that: being able to recover
+ * this token from another device.
  */
 export function ownerToken(): string {
   const stored = localStorage.getItem(STORAGE_KEY)
@@ -24,32 +25,33 @@ export function ownerToken(): string {
 }
 
 /**
- * El mismo token, también en cookie.
+ * The same token, also in a cookie.
  *
- * Descargar un archivo es una navegación del navegador, y un `<a download>` no
- * puede mandar cabeceras propias: sin la cookie el servidor no sabe de quién es
- * el archivo y responde 400. localStorage sigue siendo la fuente de verdad; la
- * cookie es el reflejo que las navegaciones sí llevan.
+ * Downloading a file is a browser navigation, and an `<a download>` cannot send
+ * headers of its own: without the cookie the server doesn't know whose file it
+ * is and answers 400. localStorage stays the source of truth; the cookie is the
+ * mirror that navigations do carry.
  */
 function writeCookie(token: string): void {
-  // SameSite=Strict: la cookie no debe viajar en pedidos que origine otro
-  // sitio, porque es la única credencial que existe.
+  // SameSite=Strict: the cookie must not travel on requests another site
+  // originates, because it is the only credential that exists.
   document.cookie = `cascade_owner=${token}; path=/; max-age=31536000; SameSite=Strict`
 }
 
 function generate(): string {
-  // crypto y no Math.random: el token es la única credencial que hay, y uno
-  // predecible dejaría leer el historial ajeno adivinándolo.
+  // crypto rather than Math.random: the token is the only credential there is,
+  // and a predictable one would let someone read another person's history by
+  // guessing it.
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 /**
- * Adopta el token de una cuenta al iniciar sesión en otro dispositivo.
+ * Adopts an account's token when signing in on another device.
  *
- * Reemplaza el token anónimo de este navegador: lo que se hubiera descargado
- * acá antes de iniciar sesión deja de verse, porque pertenece al token viejo.
+ * It replaces this browser's anonymous token: whatever was downloaded here
+ * before signing in stops being visible, because it belongs to the old token.
  */
 export function setOwnerToken(token: string): void {
   localStorage.setItem(STORAGE_KEY, token)

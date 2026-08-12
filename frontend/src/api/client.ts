@@ -12,8 +12,8 @@ export class ApiError extends Error {
 /**
  * Calls the backend on a relative path (same-origin in prod, proxied in dev).
  *
- * No hay login: la cabecera de dueño es lo que identifica a este navegador y
- * decide qué descargas devuelve el servidor.
+ * There is no login: the owner header is what identifies this browser and
+ * decides which downloads the server returns.
  */
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {

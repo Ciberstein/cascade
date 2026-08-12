@@ -33,7 +33,7 @@ test('shows an empty state when there are no packages', async () => {
 
   render(<Dashboard />)
 
-  expect(await screen.findByText(/No hay descargas/)).toBeInTheDocument()
+  expect(await screen.findByText(/No downloads yet/)).toBeInTheDocument()
 })
 
 test('refetches so status transitions appear without a reload', async () => {
@@ -45,12 +45,12 @@ test('refetches so status transitions appear without a reload', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  await vi.waitFor(() => expect(screen.getByText('bajando')).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByText('downloading')).toBeInTheDocument())
 
   // The WS feed only carries byte counts - queued -> running -> completed
   // would otherwise sit stale on screen until the user reloaded the page.
   await vi.advanceTimersByTimeAsync(4000)
-  await vi.waitFor(() => expect(screen.getByText('listo')).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByText('done')).toBeInTheDocument())
   expect(list.mock.calls.length).toBeGreaterThan(1)
 })
 
@@ -66,26 +66,27 @@ test('pasting links creates a crawl job and opens the tray', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.change(await screen.findByLabelText('Enlaces'), { target: { value: 'http://x/a.zip' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
+  fireEvent.change(await screen.findByLabelText('Links'), { target: { value: 'http://x/a.zip' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Check links' }))
 
-  // Pegar no crea un paquete: abre el análisis y el usuario confirma qué baja.
+  // Pasting doesn't create a package: it opens the check and the user
+  // confirms what gets fetched.
   await waitFor(() => expect(create).toHaveBeenCalledWith('http://x/a.zip'))
   expect(await screen.findByText('a.zip')).toBeInTheDocument()
 })
 
 test('keeps the pasted links on screen and shows why when the crawl job fails to create', async () => {
   vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
-  vi.spyOn(crawlApi, 'createCrawlJob').mockRejectedValue(new Error('Carpeta de destino no escribible'))
+  vi.spyOn(crawlApi, 'createCrawlJob').mockRejectedValue(new Error('Target folder is not writable'))
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.change(await screen.findByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
+  fireEvent.change(await screen.findByLabelText('Links'), { target: { value: 'https://x/a.zip' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Check links' }))
 
-  // Cambiar de pantalla acá tiraría las URLs que el usuario acaba de pegar.
-  expect(await screen.findByText('Carpeta de destino no escribible')).toBeInTheDocument()
-  expect(screen.getByLabelText('Enlaces')).toHaveValue('https://x/a.zip')
+  // Switching screens here would throw away the URLs just pasted.
+  expect(await screen.findByText('Target folder is not writable')).toBeInTheDocument()
+  expect(screen.getByLabelText('Links')).toHaveValue('https://x/a.zip')
 })
 
 test('maps the pause control to the status the API accepts', async () => {
@@ -94,7 +95,7 @@ test('maps the pause control to the status the API accepts', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Pausar' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Pause' }))
 
   await waitFor(() => expect(update).toHaveBeenCalledWith('p1', 'paused'))
 })
@@ -124,7 +125,7 @@ test('clicking a package name shows its detail view', async () => {
   fireEvent.click(await screen.findByText('Pkg 1'))
 
   expect(await screen.findByText('a.zip')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
 })
 
 test('opens and closes the settings view', async () => {
@@ -138,10 +139,10 @@ test('opens and closes the settings view', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Configuración' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Settings' }))
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
-  expect(await screen.findByLabelText('Enlaces')).toBeInTheDocument()
+  fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+  expect(await screen.findByLabelText('Links')).toBeInTheDocument()
 })
 
 test('falls back to the list when the open package disappears', async () => {
@@ -154,10 +155,10 @@ test('falls back to the list when the open package disappears', async () => {
 
   render(<Dashboard />)
   fireEvent.click(await vi.waitFor(() => screen.getByText('Pkg 1')))
-  expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument()
 
   await vi.advanceTimersByTimeAsync(4000)
-  await vi.waitFor(() => expect(screen.getByLabelText('Enlaces')).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByLabelText('Links')).toBeInTheDocument())
 })
 
 
@@ -167,16 +168,16 @@ test('deleting asks in the app, not in a browser popup', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove' }))
 
-  // El diálogo nombra el paquete y aclara qué NO se pierde: "eliminar" suena a
-  // que borra el archivo bajado, y no lo hace.
+  // The dialog names the package and spells out what is NOT lost: "remove"
+  // sounds like it deletes the downloaded file, and it doesn't.
   const dialog = await screen.findByRole('dialog')
   expect(dialog).toHaveTextContent('Pkg 1')
-  expect(dialog).toHaveTextContent(/se queda donde está/)
+  expect(dialog).toHaveTextContent(/stays where it is/)
   expect(remove).not.toHaveBeenCalled()
 
-  fireEvent.click(screen.getByRole('button', { name: 'Quitar' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Remove from list' }))
   await waitFor(() => expect(remove).toHaveBeenCalledWith('p1'))
 })
 
@@ -186,10 +187,10 @@ test('backing out of the delete dialog deletes nothing', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove' }))
   fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape' })
 
-  // Escape cierra, como en cualquier diálogo del sistema que este reemplaza.
+  // Escape dismisses, like the system dialogs this one replaces.
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   expect(remove).not.toHaveBeenCalled()
 })
@@ -200,15 +201,15 @@ test('renaming carries the current name in and sends the trimmed one out', async
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Renombrar' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Rename' }))
 
-  // Entra escrito el nombre actual: renombrar suele ser retocar, no empezar
-  // de cero.
-  const field = await screen.findByLabelText('Nombre del paquete')
+  // The current name arrives already typed: renaming is usually a tweak, not
+  // starting over.
+  const field = await screen.findByLabelText('Package name')
   expect(field).toHaveValue('Pkg 1')
 
   fireEvent.change(field, { target: { value: '  Backrooms  ' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Guardar nombre' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
 
   await waitFor(() => expect(rename).toHaveBeenCalledWith('p1', 'Backrooms'))
 })
@@ -219,11 +220,11 @@ test('an empty name cannot be submitted', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Renombrar' }))
-  fireEvent.change(await screen.findByLabelText('Nombre del paquete'), { target: { value: '   ' } })
+  fireEvent.click(await screen.findByRole('button', { name: 'Rename' }))
+  fireEvent.change(await screen.findByLabelText('Package name'), { target: { value: '   ' } })
 
-  // La API lo rechaza; el botón muerto lo dice antes de viajar.
-  expect(screen.getByRole('button', { name: 'Guardar nombre' })).toBeDisabled()
-  fireEvent.keyDown(screen.getByLabelText('Nombre del paquete'), { key: 'Enter' })
+  // The API rejects it; the dead button says so before any request.
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+  fireEvent.keyDown(screen.getByLabelText('Package name'), { key: 'Enter' })
   expect(rename).not.toHaveBeenCalled()
 })

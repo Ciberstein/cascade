@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Modal from './Modal'
 
 interface Props {
-  /** Nombre actual: entra escrito y seleccionado, como hacía window.prompt. */
+  /** Current name: arrives written and selected, as window.prompt used to do. */
   initial: string
   onConfirm: (name: string) => void
   onCancel: () => void
@@ -14,22 +14,22 @@ export default function RenameDialog({ initial, onConfirm, onCancel }: Props) {
 
   return (
     <Modal
-      title="Renombrar paquete"
+      title="Rename package"
       onClose={onCancel}
       actions={
         <>
-          <button onClick={onCancel}>Cancelar</button>
-          {/* La API rechaza un nombre vacío; no vale la pena viajar para que
-              falle, y un botón muerto explica el porqué mejor que un error. */}
+          <button onClick={onCancel}>Cancel</button>
+          {/* The API rejects an empty name; no point travelling to fail, and a
+              dead button explains why better than an error would. */}
           <button className="primary" disabled={trimmed === ''} onClick={() => onConfirm(trimmed)}>
-            Guardar nombre
+            Save name
           </button>
         </>
       }
     >
       <div className="modal__field">
         <label className="eyebrow" htmlFor="rename-name">
-          Nombre del paquete
+          Package name
         </label>
         <input
           id="rename-name"

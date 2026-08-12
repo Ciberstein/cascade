@@ -12,8 +12,8 @@
   color: var(--slate);
 }
 
-/* Etiqueta a la izquierda, valor a la derecha, una línea por ajuste: se lee
-   como la placa de un equipo, que es lo que estos números son. */
+/* Label left, value right, one line per setting: it reads like the plate on
+   a machine, which is what these numbers are. */
 .settings__field {
   display: grid;
   grid-template-columns: 1fr auto;

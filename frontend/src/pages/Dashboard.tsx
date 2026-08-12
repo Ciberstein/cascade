@@ -18,7 +18,7 @@ import './Dashboard.css'
 /**
  * Which screen is showing.
  *
- * Fase 1 has three screens behind one auth gate, so this stays as state rather
+ * Phase 1 had three screens behind one auth gate, so this stays as state rather
  * than pulling in a router. Detail holds an id (not the package object) so the
  * background poll keeps feeding it fresh data.
  */
@@ -40,11 +40,11 @@ type View =
 const REFRESH_INTERVAL_MS = 3000
 
 /**
- * Lo que se le está preguntando al usuario.
+ * What the user is being asked.
  *
- * Los diálogos viven acá y no en la fila: la fila avisa la intención, y el
- * único lugar que sabe qué se está por hacer con qué paquete es el que tiene
- * la lista y las llamadas a la API.
+ * The dialogs live here rather than in the row: the row announces the
+ * intention, and the only place that knows what is about to happen to which
+ * package is the one holding the list and the API calls.
  */
 type Ask =
   | { kind: 'delete'; id: string; name: string }
@@ -58,8 +58,8 @@ export default function Dashboard() {
   const [createError, setCreateError] = useState<string | null>(null)
   const [view, setView] = useState<View>({ name: 'list' })
   const [asking, setAsking] = useState<Ask | null>(null)
-  // Cubre la ventana entre que se dispara una descarga y que el servidor la
-  // marca retirada, donde un sondeo intermedio la dispararía de nuevo.
+  // Covers the window between firing a download and the server marking it
+  // retrieved, where an intervening poll would fire it again.
   const triggered = useRef<Set<string>>(new Set())
 
   const { progressByItemId } = useProgressSocket()
@@ -68,14 +68,14 @@ export default function Dashboard() {
     try {
       const fetched = await listPackages()
       setPackages(fetched)
-      // Apenas termina, se lo lleva el navegador: el servidor es un lugar de
-      // paso y lo libera en cuanto lo entrega.
+      // The moment it finishes the browser takes it: the server is a place to
+      // pass through, and it frees the file as soon as it hands it over.
       autoDownloadFinished(fetched, triggered.current)
       setError(null)
     } catch (e) {
       // A failed poll is usually the backend restarting. Keep the last known
       // list on screen and say so, rather than blanking the dashboard.
-      setError(e instanceof Error ? e.message : 'No se pudo cargar la lista de paquetes')
+      setError(e instanceof Error ? e.message : 'Could not load the package list')
     } finally {
       setLoaded(true)
     }
@@ -94,9 +94,9 @@ export default function Dashboard() {
       const job = await createCrawlJob(urls.join('\n'))
       setView({ name: 'grabber', jobId: job.id })
     } catch (e) {
-      // Se queda en la misma pantalla: cambiar de vista tiraría los enlaces
-      // recién pegados.
-      setCreateError(e instanceof Error ? e.message : 'No se pudo analizar los enlaces')
+      // It stays on the same screen: switching views would throw away the
+      // links that were just pasted.
+      setCreateError(e instanceof Error ? e.message : 'Could not check those links')
     } finally {
       setCreating(false)
     }
@@ -107,7 +107,7 @@ export default function Dashboard() {
       await renamePackage(id, name)
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo renombrar el paquete')
+      setError(e instanceof Error ? e.message : 'Could not rename the package')
     }
   }
 
@@ -116,7 +116,7 @@ export default function Dashboard() {
       await deletePackage(id)
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo eliminar el paquete')
+      setError(e instanceof Error ? e.message : 'Could not remove the package')
     }
   }
 
@@ -125,7 +125,7 @@ export default function Dashboard() {
       await updatePackageStatus(id, status)
       await refresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo actualizar el paquete')
+      setError(e instanceof Error ? e.message : 'Could not update the package')
     }
   }
 
@@ -134,8 +134,8 @@ export default function Dashboard() {
       <Account
         onClose={() => setView({ name: 'list' })}
         onIdentityChanged={() => {
-          // Iniciar sesión cambia el token de dueño: la lista que se estaba
-          // mostrando ya no es la de este navegador.
+          // Signing in changes the owner token: the list that was on screen
+          // is no longer this browser's.
           setPackages([])
           setView({ name: 'list' })
           void refresh()
@@ -178,13 +178,13 @@ export default function Dashboard() {
 
   return (
     <>
-      <Masthead note="El archivo pasa por el servidor y no se queda.">
-        <button onClick={() => setView({ name: 'account' })}>Cuenta</button>
-        <button onClick={() => setView({ name: 'settings' })}>Configuración</button>
+      <Masthead note="Paste a link, get the file. The server keeps nothing.">
+        <button onClick={() => setView({ name: 'account' })}>Account</button>
+        <button onClick={() => setView({ name: 'settings' })}>Settings</button>
       </Masthead>
 
-      {/* Pegar un enlace es lo único que hay que hacer acá, así que está a la
-          vista y no detrás de un botón que abre un diálogo. */}
+      {/* Pasting a link is the only thing to do here, so it is on screen and
+          not behind a button that opens a dialog. */}
       <LinkIntake
         onSubmit={(urls) => void handleAnalyze(urls)}
         submitting={creating}
@@ -193,12 +193,12 @@ export default function Dashboard() {
 
       <section>
         <div className="channel__head">
-          {/* La metáfora del canal la sostiene el diseño; las palabras nombran
-              lo que el usuario reconoce. */}
-          <h1 className="eyebrow">Tus descargas</h1>
+          {/* The design carries the channel metaphor; the words name what the
+              user recognises. */}
+          <h1 className="eyebrow">Your downloads</h1>
           {packages.length > 0 && (
             <span className="channel__count">
-              {packages.length} paquete{packages.length === 1 ? '' : 's'}
+              {packages.length} package{packages.length === 1 ? '' : 's'}
             </span>
           )}
         </div>
@@ -213,7 +213,7 @@ export default function Dashboard() {
           <div className="channel__empty">
             <div className="channel__empty-rail" aria-hidden="true" />
             <p className="channel__empty-text">
-              No hay descargas todavía. Pegá un enlace acá arriba.
+              No downloads yet. Paste a link up there.
             </p>
           </div>
         ) : (
@@ -235,11 +235,13 @@ export default function Dashboard() {
 
       {asking?.kind === 'delete' && (
         <ConfirmDialog
-          title="Quitar de la lista"
-          // "Eliminar" suena a que borra el archivo, y no lo hace: lo que ya
-          // llegó al equipo del usuario no lo toca nadie.
-          body={`«${asking.name}» sale de tu lista. Lo que ya bajaste a tu equipo se queda donde está.`}
-          confirmLabel="Quitar"
+          title="Remove from list"
+          // "Remove" can sound like it deletes the file, and it doesn't:
+          // nothing touches what already reached the user's machine.
+          body={`"${asking.name}" leaves your list. Whatever you already downloaded stays where it is.`}
+          // The full action, so it never collides with the row's own "Remove"
+          // sitting behind the dialog.
+          confirmLabel="Remove from list"
           destructive
           onConfirm={() => {
             void handleDelete(asking.id)

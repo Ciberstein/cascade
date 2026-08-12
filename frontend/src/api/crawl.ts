@@ -9,12 +9,12 @@ export function getCrawlJob(id: string): Promise<CrawlJob> {
   return apiFetch(`/crawl-jobs/${id}`)
 }
 
-/** Convierte los resultados elegidos en un paquete descargable. */
+/** Turns the chosen results into a downloadable package. */
 export function promoteResults(
   jobId: string,
   name: string,
   resultIds: string[],
-  /** Calidad elegida por resultado. Lo que falte usa la mejor disponible. */
+  /** Quality chosen per result. Anything missing uses the best available. */
   quality: Record<string, string> = {},
 ): Promise<Package> {
   return apiFetch(`/crawl-jobs/${jobId}/promote`, {

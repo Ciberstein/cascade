@@ -1,6 +1,6 @@
-/* La boca del canal. Está siempre a la vista porque pegar un enlace es lo
-   único que hay que hacer acá: esconderlo detrás de un botón y un diálogo era
-   un paso de más para la única acción de la herramienta. */
+/* The mouth of the channel. Always on screen because pasting a link is the
+   only thing to do here: hiding it behind a button and a dialog was one step
+   too many for the tool's single action. */
 .intake {
   display: grid;
   grid-template-columns: var(--rail-w) 1fr;
@@ -9,8 +9,8 @@
   margin-bottom: 2.5rem;
 }
 
-/* Riel lleno: la entrada del canal siempre tiene caudal. Es el mismo elemento
-   que mide cada descarga más abajo. */
+/* A full rail: the channel's intake always has flow. It is the same element
+   that measures every download below. */
 .intake__rail {
   border-radius: 1px;
   background: linear-gradient(to bottom, var(--flow-lit), var(--flow));

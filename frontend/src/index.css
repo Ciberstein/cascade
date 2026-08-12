@@ -1,14 +1,13 @@
-/* Cascade - sistema visual base.
+/* Cascade - base visual system.
  *
- * La idea rectora es el canal: un archivo entra por arriba, atraviesa el
- * servidor y sale hacia el navegador sin quedarse. Todo lo de acá abajo
- * existe para sostener esa lectura - por eso el medidor de progreso cae en
- * vertical (ver FlowRail) y por eso la paleta es agua y piedra mojada en vez
- * del gris de panel de control que usa cualquier gestor de descargas.
+ * The governing idea is the channel: a file enters at the top, crosses the
+ * server and leaves towards the browser without staying. Everything below
+ * exists to hold up that reading - which is why the progress meter falls
+ * vertically (see FlowRail) and why the palette is water and wet stone rather
+ * than the control-panel grey every download manager reaches for.
  *
- * Las fuentes se sirven desde /fonts: una herramienta que se define por no
- * guardar nada del usuario no puede pedirle tipografías a un tercero en cada
- * visita.
+ * The fonts are served from /fonts: a tool that defines itself by keeping
+ * nothing of yours cannot ask a third party for its typefaces on every visit.
  */
 
 @font-face {
@@ -80,9 +79,9 @@
 }
 
 :root {
-  /* Agua y piedra mojada. Cada color tiene un trabajo: --flow es lo que se
-     mueve, --done lo que ya llegó, --warn lo que está seco (en pausa, en
-     espera) y --fail lo que se rompió. Nada más pide color. */
+  /* Water and wet stone. Every colour has a job: --flow is what moves,
+     --done what has arrived, --warn what is dry (paused, waiting) and --fail
+     what broke. Nothing else gets to ask for colour. */
   --ground: #e4ebea;
   --panel: #f6f9f8;
   --edge: #c4d2d1;
@@ -104,8 +103,8 @@
   --display: 'Archivo', 'Segoe UI', system-ui, sans-serif;
   --data: 'DM Mono', ui-monospace, 'Cascadia Mono', Menlo, monospace;
 
-  /* Duración única para todo lo que se mueve: el llenado del medidor, el
-     vaciado al entregar y los estados de control comparten reloj. */
+  /* One duration for everything that moves: the meter filling, the emptying
+     on delivery and the control states all share a clock. */
   --beat: 0.45s;
 
   color-scheme: light;
@@ -114,9 +113,9 @@
   line-height: 1.55;
 }
 
-/* La canaleta se angosta en pantallas chicas. Vive acá y no en cada
-   componente porque el riel del intake, el de cada fila y el del canal vacío
-   tienen que seguir alineados en el mismo eje. */
+/* The channel narrows on small screens. It lives here and not in each
+   component because the intake rail, every row rail and the empty-channel
+   rail have to stay on the same axis. */
 @media (max-width: 34rem) {
   :root {
     --gutter: 1rem;
@@ -125,8 +124,8 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* El mismo canal de noche: no es otro diseño, son los mismos papeles
-       repartidos entre otros valores. */
+    /* The same channel at night: not a different design, the same roles
+       handed to different values. */
     --ground: #08181b;
     --panel: #0e2226;
     --edge: #1e383d;
@@ -157,8 +156,8 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Etiqueta de sección: versaleta ancha. Es el único lugar donde la Archivo
-   se estira, y por eso marca jerarquía sin necesidad de tamaño ni de peso. */
+/* Section label: wide small caps. The only place Archivo is stretched,
+   which is how it marks hierarchy without needing size or weight. */
 .eyebrow {
   margin: 0;
   font-size: 0.68rem;
@@ -169,9 +168,9 @@ body {
   color: var(--slate);
 }
 
-/* Cifras, nombres de archivo y URLs: monoespaciada. No es decoración - hace
-   comparables los tamaños en una columna y hace legible una extensión al
-   final de un nombre largo. */
+/* Figures, filenames and URLs: monospaced. Not decoration - it makes sizes
+   comparable down a column and keeps an extension readable at the end of a
+   long name. */
 .data {
   font-family: var(--data);
   font-variant-numeric: tabular-nums;
@@ -200,8 +199,7 @@ button:disabled {
   cursor: not-allowed;
 }
 
-/* Botón principal de cada pantalla. Uno solo por vista: si hay dos, ninguno
-   guía. */
+/* The main button of each screen. One per view: with two, neither leads. */
 .primary {
   background: var(--flow);
   border-color: var(--flow);
@@ -214,14 +212,14 @@ button:disabled {
   color: var(--panel);
 }
 
-/* Acciones que destruyen o interrumpen: neutras hasta que el puntero llega. */
+/* Actions that destroy or interrupt: neutral until the pointer arrives. */
 .danger:hover:not(:disabled) {
   border-color: var(--fail);
   color: var(--fail);
 }
 
-/* La confirmación de algo que se pierde. Solo dentro de un diálogo, nunca
-   suelta en la página: un botón rojo permanente se vuelve paisaje. */
+/* The confirmation for something that gets lost. Only inside a dialog,
+   never loose on the page: a permanent red button becomes scenery. */
 .destructive {
   background: var(--fail);
   border-color: var(--fail);
@@ -234,9 +232,9 @@ button:disabled {
   color: var(--panel);
 }
 
-/* Todo campo se levanta del fondo, en claro y en oscuro: es la señal de "acá
-   se escribe", y mezclar campos hundidos con campos levantados hace que
-   algunos no parezcan campos. */
+/* Every field rises off the background, in light and in dark: that is the
+   "you type here" signal, and mixing sunken fields with raised ones makes
+   some of them stop looking like fields. */
 input,
 textarea,
 select {
@@ -269,8 +267,8 @@ a {
   color: var(--flow);
 }
 
-/* Un mensaje de error dice qué pasó y no se disculpa; el color lo separa del
-   resto sin gritar. */
+/* An error says what happened and does not apologise; the colour sets it
+   apart without shouting. */
 .notice {
   margin: 0;
   padding: 0.55rem 0.75rem;

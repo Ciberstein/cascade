@@ -1,5 +1,5 @@
-/* La columna por la que baja todo. Angosta a propósito: la vista es una
-   lista de cosas que caen, y una columna ancha rompe esa lectura. */
+/* The column everything falls down. Narrow on purpose: the view is a list of
+   things descending, and a wide column breaks that reading. */
 .app {
   max-width: 62rem;
   margin: 0 auto;

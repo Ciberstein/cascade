@@ -14,9 +14,9 @@
   letter-spacing: 0.01em;
 }
 
-/* Dónde está el archivo mientras cruza. Es un detalle técnico y se ve como
-   tal: nadie tiene que ir a esa carpeta, el archivo termina en la del
-   navegador. */
+/* Where the file sits while it crosses. A technical detail, and it looks
+   like one: nobody has to go to that folder, the file ends up in the
+   browser's. */
 .detail__where {
   display: flex;
   align-items: baseline;
@@ -62,8 +62,8 @@
   gap: 1rem;
 }
 
-/* Los nombres de archivo van en monoespaciada: hace legible una extensión al
-   final de un nombre largo y alinea la columna cuando hay varios. */
+/* Filenames go in monospace: it keeps an extension readable at the end of a
+   long name and aligns the column when there are several. */
 .item__name {
   font-family: var(--data);
   font-size: 0.88rem;

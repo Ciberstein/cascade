@@ -39,8 +39,8 @@ test('a file still downloading is left alone', () => {
 })
 
 test('a file already retrieved is not fetched again', () => {
-  // El servidor lo marca al entregarlo; sin esto cada sondeo volvería a
-  // dispararlo y el navegador bajaría el mismo archivo una y otra vez.
+  // The server marks it on delivery; without this every poll would fire it
+  // again and the browser would fetch the same file over and over.
   autoDownloadFinished([pkg([item({ retrieved: true })])], new Set())
 
   expect(clicked).toEqual([])
@@ -50,7 +50,7 @@ test('the same file is not triggered twice by two polls in a row', () => {
   const triggered = new Set<string>()
 
   autoDownloadFinished([pkg([item()])], triggered)
-  // Segundo sondeo antes de que el servidor alcance a marcarlo retirado.
+  // A second poll before the server manages to mark it retrieved.
   autoDownloadFinished([pkg([item()])], triggered)
 
   expect(clicked).toHaveLength(1)
@@ -63,7 +63,7 @@ test('a file the server already released is not requested', () => {
 })
 
 test('the audio track of a merge is never downloaded on its own', () => {
-  // Es un medio para conseguir el archivo, no un archivo que el usuario pidió.
+  // It is a means to get the file, not a file the user asked for.
   autoDownloadFinished([pkg([item({ merge_role: 'audio' })])], new Set())
 
   expect(clicked).toEqual([])

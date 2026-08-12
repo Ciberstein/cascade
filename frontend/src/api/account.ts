@@ -5,7 +5,7 @@ export interface Account {
   username: string | null
 }
 
-/** Con qué nombre está registrado este navegador, o null si no lo está. */
+/** The name this browser is registered under, or null if it isn't. */
 export function getAccount(): Promise<Account> {
   return apiFetch('/account')
 }
@@ -18,10 +18,10 @@ export function register(username: string, password: string): Promise<Account> {
 }
 
 /**
- * Recupera en este navegador la lista de descargas de una cuenta.
+ * Brings an account's download list into this browser.
  *
- * La cuenta no es una puerta de entrada: lo único que devuelve es el token de
- * dueño, que se guarda acá y a partir de ahí este dispositivo ve esa lista.
+ * The account is not a front door: all it returns is the owner token, which is
+ * stored here, and from then on this device sees that list.
  */
 export async function login(username: string, password: string): Promise<void> {
   const { owner_token } = await apiFetch<{ owner_token: string }>('/account/login', {

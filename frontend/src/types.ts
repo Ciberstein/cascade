@@ -13,15 +13,15 @@ export interface DownloadItem {
   total_size: number | null
   downloaded_bytes: number
   error_message: string | null
-  /** Qué plugin lo resolvió; 'direct' para un enlace directo. */
+  /** Which plugin resolved it; 'direct' for a plain link. */
   hoster: string
-  /** ISO 8601 mientras el hoster pide esperar; null en el caso normal. */
+  /** ISO 8601 while the hoster asks us to wait; null in the normal case. */
   retry_after: string | null
-  /** El archivo ya se liberó del servidor; la fila queda en el historial. */
+  /** The file has been freed from the server; the row stays in the history. */
   file_removed: boolean
-  /** Ya retirado; el navegador no lo vuelve a disparar solo. */
+  /** Already retrieved; the browser won't fire it again on its own. */
   retrieved: boolean
-  /** 'video'/'audio' mientras se baja una calidad que vino en pistas separadas. */
+  /** 'video'/'audio' while downloading a quality that came as separate tracks. */
   merge_role: string | null
 }
 
@@ -60,7 +60,7 @@ export interface CrawlResult {
   hoster: string
   status: CrawlResultStatus
   error_message: string | null
-  /** Calidades entre las que elegir. Vacío para lo que no es video. */
+  /** Qualities to choose from. Empty for anything that isn't video. */
   variants: Variant[]
 }
 

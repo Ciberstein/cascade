@@ -5,7 +5,7 @@ import './Account.css'
 
 interface Props {
   onClose: () => void
-  /** Se llama tras iniciar sesión: la lista pasa a ser la de esa cuenta. */
+  /** Called after signing in: the list becomes that account's. */
   onIdentityChanged: () => void
 }
 
@@ -28,7 +28,7 @@ export default function Account({ onClose, onIdentityChanged }: Props) {
     try {
       await action()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo completar la operación')
+      setError(e instanceof Error ? e.message : 'Could not complete that')
     } finally {
       setBusy(false)
     }
@@ -38,15 +38,15 @@ export default function Account({ onClose, onIdentityChanged }: Props) {
     return (
       <>
         <Masthead>
-          <button onClick={onClose}>Volver</button>
+          <button onClick={onClose}>Back</button>
         </Masthead>
 
-        <h1 className="account__title">Cuenta</h1>
+        <h1 className="account__title">Account</h1>
         <p className="account__who">
-          Este navegador está registrado como <span className="account__name">{registeredAs}</span>.
+          This browser is registered as <span className="account__name">{registeredAs}</span>.
         </p>
         <p className="account__lede">
-          Para ver esta misma lista en otro dispositivo, entrá ahí con tu usuario y contraseña.
+          To see this same list on another device, sign in there with your username and password.
         </p>
       </>
     )
@@ -55,27 +55,27 @@ export default function Account({ onClose, onIdentityChanged }: Props) {
   return (
     <>
       <Masthead>
-        <button onClick={onClose}>Volver</button>
+        <button onClick={onClose}>Back</button>
       </Masthead>
 
-      <h1 className="account__title">Cuenta (opcional)</h1>
+      <h1 className="account__title">Account (optional)</h1>
       <p className="account__lede">
-        Cascade funciona sin registrarse. Tu lista de descargas vive en este navegador; si borrás
-        los datos del sitio, se pierde el acceso a ella. Registrate solo si querés conservarla y
-        verla desde otro dispositivo.
+        Cascade works without an account. Your download list lives in this browser; clearing site
+        data loses access to it. Register only if you want to keep that list and see it from another
+        device.
       </p>
 
       <div className="account__form">
         <div className="account__field">
           <label className="eyebrow" htmlFor="account-user">
-            Usuario
+            Username
           </label>
           <input id="account-user" value={username} onChange={(e) => setUsername(e.target.value)} />
         </div>
 
         <div className="account__field">
           <label className="eyebrow" htmlFor="account-pass">
-            Contraseña
+            Password
           </label>
           <input
             id="account-pass"
@@ -97,14 +97,14 @@ export default function Account({ onClose, onIdentityChanged }: Props) {
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                // Conserva la lista actual: registrarse ata el token de este
-                // navegador a la cuenta, no crea una lista nueva.
+                // Keeps the current list: registering ties this browser's token
+                // to the account, it does not start a new list.
                 const account = await register(username, password)
                 setRegisteredAs(account.username)
               })
             }
           >
-            Registrarme y conservar esta lista
+            Register and keep this list
           </button>
           <button
             className="primary"
@@ -116,7 +116,7 @@ export default function Account({ onClose, onIdentityChanged }: Props) {
               })
             }
           >
-            Entrar y traer mi lista
+            Sign in and bring my list
           </button>
         </div>
       </div>

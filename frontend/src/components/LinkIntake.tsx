@@ -3,7 +3,7 @@ import './LinkIntake.css'
 
 interface Props {
   onSubmit: (urls: string[]) => void
-  /** Mientras se crea el análisis. */
+  /** Set while the analysis is being created. */
   submitting?: boolean
   error?: string | null
 }
@@ -14,8 +14,8 @@ export default function LinkIntake({ onSubmit, submitting = false, error }: Prop
   const { urls, duplicates } = useMemo(() => parseLinks(raw), [raw])
 
   function submit() {
-    // El nombre del paquete no se pide acá: se elige al confirmar, cuando el
-    // usuario ya vio qué archivos aparecieron.
+    // The package name isn't asked for here: it is chosen at confirmation time,
+    // once the user has seen which files turned up.
     if (urls.length > 0 && !submitting) onSubmit(urls)
   }
 
@@ -31,19 +31,19 @@ export default function LinkIntake({ onSubmit, submitting = false, error }: Prop
         }}
       >
         <label className="eyebrow" htmlFor="links">
-          Enlaces
+          Links
         </label>
 
         <textarea
           id="links"
           className="intake__input"
           rows={4}
-          placeholder="Una URL por línea"
+          placeholder="One URL per line"
           value={raw}
           onChange={(e) => setRaw(e.target.value)}
           onKeyDown={(e) => {
-            // Enter solo hace un salto de línea, que es lo correcto en una
-            // lista de URLs; el atajo cubre a quien pega y quiere seguir.
+            // A bare Enter just breaks the line, which is right for a list of
+            // URLs; the shortcut is for whoever pastes and wants to move on.
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault()
               submit()
@@ -60,19 +60,19 @@ export default function LinkIntake({ onSubmit, submitting = false, error }: Prop
         <div className="intake__foot">
           {urls.length > 0 ? (
             <p className="intake__count">
-              {urls.length} enlace{urls.length === 1 ? '' : 's'}
+              {urls.length} link{urls.length === 1 ? '' : 's'}
               {duplicates > 0 &&
-                ` · ${duplicates} enlace${duplicates === 1 ? '' : 's'} duplicado${duplicates === 1 ? '' : 's'} omitido${duplicates === 1 ? '' : 's'}`}
+                ` · ${duplicates} duplicate link${duplicates === 1 ? '' : 's'} skipped`}
             </p>
           ) : (
             <p className="intake__how">
-              Primero se ve qué hay detrás de cada enlace. Después elegís calidad y el archivo baja a
-              tu carpeta de descargas.
+              First we look at what is behind each link. Then you pick the quality and the file
+              lands in your downloads folder.
             </p>
           )}
 
           <button type="submit" className="primary" disabled={urls.length === 0 || submitting}>
-            Analizar
+            Check links
           </button>
         </div>
       </form>
@@ -81,11 +81,12 @@ export default function LinkIntake({ onSubmit, submitting = false, error }: Prop
 }
 
 /**
- * Parte el texto en URLs únicas y no vacías.
+ * Splits the text into unique, non-empty URLs.
  *
- * Deduplicar acá (en vez de dejar que el backend encole el mismo archivo dos
- * veces) cubre el caso habitual: pegar una lista que ya se solapa con la que
- * se pegó hace un rato. El descarte se informa para que no sea silencioso.
+ * De-duplicating here (rather than letting the backend queue the same file
+ * twice) covers the usual cause: pasting a list that already overlaps one
+ * pasted a moment ago. The count is reported back so the omission is visible
+ * instead of silent.
  */
 function parseLinks(raw: string): { urls: string[]; duplicates: number } {
   const lines = raw

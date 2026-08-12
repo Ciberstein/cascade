@@ -4,9 +4,9 @@ import './Modal.css'
 
 interface Props {
   title: string
-  /** Pinta el riel: 'fail' cuando la acción hace perder algo. */
+  /** Paints the rail: 'fail' when the action loses something. */
   tone?: 'flow' | 'fail'
-  /** Cancelar: Escape, clic en el fondo, o el botón de descarte. */
+  /** Dismissal: Escape, a click on the backdrop, or the cancel button. */
   onClose: () => void
   children: ReactNode
   actions: ReactNode
@@ -15,26 +15,26 @@ interface Props {
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), select, textarea, a[href]'
 
 /**
- * Diálogo propio, en el lenguaje de la app.
+ * Our own dialog, in the app's language.
  *
- * Reemplaza a window.confirm y window.prompt: los diálogos del navegador se
- * ven distinto en cada sistema, no se pueden escribir con la voz del producto
- * y en Chrome traen una casilla para silenciarlos que deja la app sin forma de
- * preguntar nada.
+ * Replaces window.confirm and window.prompt: the browser's dialogs look
+ * different on every system, cannot be written in the product's voice, and in
+ * Chrome carry a checkbox to silence them that leaves the app with no way to
+ * ask anything at all.
  */
 export default function Modal({ title, tone = 'flow', onClose, children, actions }: Props) {
   const panel = useRef<HTMLDivElement>(null)
   const titleId = useId()
 
   useEffect(() => {
-    // A dónde vuelve el foco al cerrar: sin esto, quien abrió el diálogo con el
-    // teclado queda al principio de la página.
+    // Where focus returns on close: without this, whoever opened the dialog
+    // from the keyboard ends up back at the top of the page.
     const opener = document.activeElement as HTMLElement | null
 
     const first = panel.current?.querySelector<HTMLElement>(FOCUSABLE)
     first?.focus()
-    // Igual que hacía window.prompt: el texto entra seleccionado, así escribir
-    // lo reemplaza y no hay que borrarlo a mano.
+    // Same as window.prompt did: the text arrives selected, so typing replaces
+    // it and nobody has to clear it by hand.
     if (first instanceof HTMLInputElement) first.select()
 
     const previousOverflow = document.body.style.overflow
@@ -53,8 +53,8 @@ export default function Modal({ title, tone = 'flow', onClose, children, actions
     }
     if (e.key !== 'Tab') return
 
-    // Ciclo cerrado de tabulación: sin esto el foco se va a la página de atrás,
-    // que está tapada, y no se ve dónde quedó.
+    // Closed tab cycle: without it focus walks off into the page behind, which
+    // is covered, and there is no way to see where the cursor went.
     const items = [...(panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])]
     if (items.length === 0) return
 
@@ -69,8 +69,8 @@ export default function Modal({ title, tone = 'flow', onClose, children, actions
     <div
       className="modal"
       onKeyDown={handleKeyDown}
-      // mousedown y no click: si se arrastra para seleccionar texto dentro del
-      // panel y se suelta afuera, un click cerraría el diálogo.
+      // mousedown rather than click: if you drag to select text inside the
+      // panel and release outside it, a click would close the dialog.
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
