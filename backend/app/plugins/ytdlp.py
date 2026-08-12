@@ -57,6 +57,47 @@ _YDL_OPTS = {
 #:     youtube:player_client=tv,web_safari
 _EXTRACTOR_ARGS_ENV = "YTDLP_EXTRACTOR_ARGS"
 
+#: Player clients to walk through when the default one is refused.
+#:
+#: A list rather than a single value because the point is to survive YouTube
+#: changing its mind: any one entry can stop working without the plugin
+#: stopping with it. yt-dlp's own default is tried first and is what serves
+#: every site that isn't blocking us.
+_FALLBACK_CLIENTS = ("tv", "ios", "mweb", "android_vr", "web_safari")
+
+#: What being blocked reads like, as opposed to a video that is simply gone.
+#:
+#: Matching matters in both directions: retrying a deleted video five times
+#: hammers the site to reach the same answer slower, and *not* retrying a block
+#: is the bug this exists to fix.
+_BLOCKED_MARKERS = ("not a bot", "sign in to confirm", "confirm your age", "cookies")
+
+#: The client that last got through, remembered so the cost of finding it is
+#: paid once rather than on every request. Process-local on purpose: it is a
+#: cache, not a setting, and a restart re-learning it costs one extra attempt.
+_working_client: str | None = None
+
+
+def _is_blocked(exc: Exception) -> bool:
+    lowered = str(exc).lower()
+    return any(marker in lowered for marker in _BLOCKED_MARKERS)
+
+
+def _client_order() -> list[str | None]:
+    """Which player clients to try, best guess first.
+
+    None means yt-dlp's default. It stays near the front even after a fallback
+    has been learned, because a block is usually temporary and the default is
+    the one the extractor is written and tested against.
+    """
+    order: list[str | None] = []
+    if _working_client is not None:
+        order.append(_working_client)
+    if None not in order:
+        order.append(None)
+    order.extend(c for c in _FALLBACK_CLIENTS if c not in order)
+    return order
+
 
 def parse_extractor_args(raw: str) -> dict[str, dict[str, list[str]]]:
     """Turns yt-dlp's CLI --extractor-args syntax into the dict its API wants.
@@ -163,17 +204,45 @@ class YtDlpHoster:
         url = canonical_url(url) if self._extract is None else url
 
         opts = dict(_YDL_OPTS)
-        # Read per call, not captured at import: the whole point is being able
-        # to change it from the platform's variables and have the next request
-        # use it, without a rebuild.
-        extractor_args = parse_extractor_args(os.environ.get(_EXTRACTOR_ARGS_ENV, ""))
-        if extractor_args:
-            opts["extractor_args"] = extractor_args
         if flat:
             # List a playlist without resolving each video: the tray needs the
             # titles, not the final URLs, which expire anyway.
             opts["extract_flat"] = "in_playlist"
 
+        # Read per call, not captured at import, so a change in the platform's
+        # variables lands on the next request. Set, it wins outright: someone
+        # pinning a client has a reason, and second-guessing them by trying
+        # others would make the setting a suggestion.
+        override = parse_extractor_args(os.environ.get(_EXTRACTOR_ARGS_ENV, ""))
+        if override:
+            return await self._attempt(url, flat, {**opts, "extractor_args": override})
+
+        # Otherwise walk the clients until one gets through. Only a block moves
+        # on to the next; everything else is the answer and is raised as it is.
+        global _working_client
+        last: PluginError | None = None
+        for client in _client_order():
+            attempt = dict(opts)
+            if client is not None:
+                attempt["extractor_args"] = {"youtube": {"player_client": [client]}}
+            try:
+                info = await self._attempt(url, flat, attempt)
+            except PluginError as exc:
+                if not _is_blocked(exc):
+                    raise
+                last = exc
+                continue
+
+            if client != _working_client:
+                # Remembered so the next request starts where this one ended up
+                # instead of paying for the search again.
+                logger.info("yt-dlp player client %s got through; remembering it", client)
+                _working_client = client
+            return info
+
+        raise last if last is not None else PluginError(f"{url}: no player client got through")
+
+    async def _attempt(self, url: str, flat: bool, opts: dict) -> dict[str, Any]:
         # The error translation wraps the injected extractor too: that is
         # precisely the part that has to be testable, and leaving it outside the
         # test path would make it dead letter.

@@ -142,6 +142,13 @@ list.
 | `pixeldrain` | files and albums |
 | `direct` | any URL; goes last and closes the list |
 
+When a site refuses the default player client - YouTube answers "Sign in to
+confirm you're not a bot" to anything coming from a datacenter address - the
+plugin walks a list of alternatives until one gets through, and remembers which
+one worked. Only a block moves on to the next; a video that is simply gone is
+reported as gone. `YTDLP_EXTRACTOR_ARGS` pins a specific client when you want
+to override the search entirely.
+
 The contract is two operations. `crawl(url)` runs when the link is pasted and
 returns which files sit behind it. `resolve(url, format_id)` runs just before
 downloading, because most hosters' direct URLs expire within minutes and one

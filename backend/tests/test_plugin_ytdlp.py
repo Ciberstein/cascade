@@ -3,6 +3,7 @@
 import pytest
 
 from app.plugins.base import LinkDead, PluginError, UnsupportedLink
+import app.plugins.ytdlp as ytdlp_mod
 from app.plugins.ytdlp import parse_extractor_args, PLUGIN, YtDlpHoster
 
 PROGRESSIVE = {
@@ -345,3 +346,70 @@ def test_nothing_configured_leaves_yt_dlp_on_its_own_defaults():
     # Every site that isn't fighting us works untouched; the override only
     # exists for the ones that are.
     assert parse_extractor_args("") == {}
+
+
+BOT_CHECK = "ERROR: [youtube] abc: Sign in to confirm you're not a bot. Use --cookies"
+
+
+@pytest.mark.asyncio
+async def test_a_block_moves_on_to_the_next_player_client():
+    calls = []
+
+    def flaky(url, flat):
+        calls.append(url)
+        if len(calls) < 3:
+            raise RuntimeError(BOT_CHECK)
+        return {"webpage_url": url, "title": "v", "ext": "mp4", "formats": []}
+
+    result = await ytdlp_mod.YtDlpHoster(extract=flaky).crawl("https://youtube.com/watch?v=abc")
+
+    # Being refused is not an answer, it is a closed door: try the next one.
+    assert len(calls) == 3
+    assert result.files[0].filename == "v.mp4"
+
+
+@pytest.mark.asyncio
+async def test_a_dead_video_is_not_retried_against_every_client():
+    calls = []
+
+    def gone(url, flat):
+        calls.append(url)
+        raise RuntimeError("ERROR: Video unavailable. This video has been removed")
+
+    with pytest.raises(LinkDead):
+        await ytdlp_mod.YtDlpHoster(extract=gone).crawl("https://youtube.com/watch?v=abc")
+
+    # Retrying this reaches the same answer slower and hammers the site to do it.
+    assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_the_client_that_got_through_is_remembered(monkeypatch):
+    monkeypatch.setattr(ytdlp_mod, "_working_client", None)
+    calls = []
+
+    def flaky(url, flat):
+        calls.append(url)
+        if len(calls) == 1:
+            raise RuntimeError(BOT_CHECK)
+        return {"webpage_url": url, "title": "v", "ext": "mp4", "formats": []}
+
+    hoster = ytdlp_mod.YtDlpHoster(extract=flaky)
+    await hoster.crawl("https://youtube.com/watch?v=abc")
+
+    # The search cost is paid once; the next request starts where this ended.
+    assert ytdlp_mod._working_client == ytdlp_mod._FALLBACK_CLIENTS[0]
+    await hoster.crawl("https://youtube.com/watch?v=def")
+    assert len(calls) == 3
+
+
+def test_the_default_client_stays_near_the_front_after_a_fallback(monkeypatch):
+    monkeypatch.setattr(ytdlp_mod, "_working_client", "tv")
+
+    order = ytdlp_mod._client_order()
+
+    # A block is usually temporary, and the default is the one the extractor is
+    # written and tested against - so it keeps a place at the front.
+    assert order[0] == "tv"
+    assert order[1] is None
+    assert len(order) == len(set(map(str, order)))
