@@ -1,0 +1,13 @@
+Las tipografías de esta carpeta se sirven desde el mismo origen que la app y
+no desde un CDN: una herramienta cuyo argumento es que no guarda nada del
+usuario no puede filtrar cada visita a un tercero.
+
+Archivo — Omnibus-Type. SIL Open Font License 1.1.
+  https://github.com/Omnibus-Type/Archivo
+
+DM Mono — Colophon Foundry para Google Fonts. SIL Open Font License 1.1.
+  https://github.com/googlefonts/dm-mono
+
+La OFL permite redistribuir e incrustar estos archivos, incluso en un producto
+comercial, mientras se conserve este aviso. Texto completo de la licencia:
+  https://openfontlicense.org

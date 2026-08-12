@@ -1,29 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
-import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
-import { me } from './api/auth'
 import './App.css'
 
+/**
+ * Sin pantalla de login: se entra y se usa.
+ *
+ * La identidad de este navegador es un token anónimo en localStorage (ver
+ * api/owner.ts), que el cliente manda en cada request. No hay nada que
+ * esperar antes de renderizar, así que tampoco hay estado de "verificando
+ * sesión" ni parpadeo de formulario.
+ */
 function App() {
-  // null = the session check hasn't answered yet. Rendering Login during that
-  // window would flash the form at users who are already signed in.
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
-
-  useEffect(() => {
-    me()
-      .then(() => setIsAuthenticated(true))
-      .catch(() => setIsAuthenticated(false))
-  }, [])
-
-  // Stable so Dashboard's polling effect isn't torn down on every render.
-  const handleUnauthorized = useCallback(() => setIsAuthenticated(false), [])
-
-  if (isAuthenticated === null) return null
-  if (!isAuthenticated) return <Login onSuccess={() => setIsAuthenticated(true)} />
-
   return (
     <div className="app">
-      <Dashboard onUnauthorized={handleUnauthorized} />
+      <Dashboard />
     </div>
   )
 }

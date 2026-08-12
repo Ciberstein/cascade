@@ -1,17 +1,21 @@
 import asyncio
+import datetime as dt
 import logging
 import os
 from contextlib import suppress
-from typing import Callable
+from typing import Awaitable, Callable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.downloader import FLUSH_INTERVAL_SECONDS
 from app.engine.item_runner import run_download_item
+from app.engine.merge import merge_ready_groups, part_suffix
 from app.engine.progress import ThrottledBroadcaster
+from app.paths import ensure_within, safe_filename
 from app.engine.rate_limiter import limiter
 from app.models import Chunk, DownloadItem, Package
+from app.plugins.base import DirectLink, RateLimited
 from app.ws.manager import manager
 
 logger = logging.getLogger(__name__)
@@ -39,7 +43,14 @@ async def resume_stale_running_items(db: AsyncSession) -> None:
 
 def _dest_path(item: DownloadItem) -> str:
     package_dir = item.package.target_dir if item.package else "/downloads"
-    return os.path.join(package_dir, item.filename)
+    # Doble barrera con safe_filename del crawler, a propósito: esta corre
+    # justo antes de crear el directorio y abrir el archivo, así que también
+    # cubre items que hayan entrado por otro camino. Si algo escapó, el item
+    # falla en vez de escribir fuera de su paquete.
+    # Las dos partes de una unión viven en la misma carpeta que el resultado:
+    # sin sufijo se pisarían entre sí.
+    name = safe_filename(item.filename) + part_suffix(item.merge_role)
+    return ensure_within(package_dir, os.path.join(package_dir, name))
 
 
 async def _write_checkpoint(
@@ -98,7 +109,7 @@ async def _run_one_item(
     db_lock: asyncio.Lock,
     item: DownloadItem,
     chunks_per_file: int,
-    identity: Callable[[str], str],
+    resolver: Callable[[str, str, str | None], Awaitable[DirectLink]],
 ) -> None:
     async with db_lock:
         item.status = "running"
@@ -109,13 +120,17 @@ async def _run_one_item(
     # resolution, directory creation, the resume-chunk lookup) is what threw -
     # see the try's docstring-style comment for why the try starts here and
     # not just around run_download_item.
+    # Se lee una sola vez, fuera de los callbacks: item.package ya viene
+    # cargado y tocarlo desde on_progress dirtiaría la sesión compartida.
+    owner_id = item.package.owner_id if item.package else None
+
     chunks_ref: list[Chunk] = []
     downloaded_so_far = 0
     checkpoint_by_index: dict[int, int] = {}
 
     try:
         # Everything from here through the success commit must stay inside
-        # this try: identity() (a future hoster-plugin URL resolver),
+        # this try: resolver() (the hoster-plugin URL resolver),
         # os.makedirs (PermissionError/OSError on a bad filename), and the
         # locked chunk-lookup db.execute() can all raise. If any of them
         # escaped uncaught, it would propagate through this item's Task,
@@ -124,7 +139,10 @@ async def _run_one_item(
         # download and package-completion check too - not just this one
         # item's. Catching broadly here keeps a single item's failure
         # contained to that item.
-        resolved_url = identity(item.url)
+        # Resolver acá y no al agregar: las URLs directas caducan, así que la
+        # que sirve es la que se pide justo antes de bajar.
+        direct = await resolver(item.url, item.hoster, item.format_id)
+        resolved_url = direct.url
         dest_path = _dest_path(item)
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
@@ -174,7 +192,9 @@ async def _run_one_item(
         def on_progress(chunk_index: int, n: int) -> None:
             nonlocal downloaded_so_far
             downloaded_so_far += n
-            _broadcaster.report(item_id=item.id, downloaded_bytes=downloaded_so_far)
+            _broadcaster.report(
+                item_id=item.id, downloaded_bytes=downloaded_so_far, owner_id=owner_id
+            )
 
         # Durable per-chunk offsets, kept in a plain dict for exactly the same
         # reason as downloaded_so_far above: on_checkpoint is a sync callback
@@ -210,6 +230,7 @@ async def _run_one_item(
                 # The one process-wide limiter, so the configured speed is a
                 # total across every concurrent chunk of every running item.
                 rate_limiter=limiter,
+                headers=direct.headers,
             )
         finally:
             # Stopped before the finalizing commit below so it can't interleave
@@ -230,9 +251,23 @@ async def _run_one_item(
             item.total_size = result.total_size
             item.downloaded_bytes = downloaded_so_far
             item.status = "completed"
+            # Se limpia al llegar a un estado final: si quedara, la UI seguiría
+            # anunciando "esperando hasta HH:MM" sobre un item ya terminado, y
+            # ese valor viejo taparía la espera real de un item hermano.
+            item.retry_after = None
             for chunk in chunks_ref:
                 chunk.status = "completed"
                 chunk.downloaded_bytes = chunk.range_end - chunk.range_start + 1
+            await db.commit()
+    except RateLimited as exc:
+        async with db_lock:
+            await db.rollback()
+            # Vuelve a queued, no a error: el hoster no falló, pidió esperar.
+            # Un estado propio obligaría a moverlo de ida y vuelta con dos
+            # transiciones más que pueden fallar.
+            item.status = "queued"
+            item.retry_after = exc.retry_at
+            item.error_message = None
             await db.commit()
     except Exception as exc:  # noqa: BLE001 - persist failure state, don't crash run_pending
         async with db_lock:
@@ -243,6 +278,7 @@ async def _run_one_item(
             # commit too.
             await db.rollback()
             item.status = "error"
+            item.retry_after = None  # mismo motivo que en el camino de éxito
             item.error_message = str(exc)
             # Keep the durable offsets rather than the optimistic byte counter:
             # a user who retries this item should pick up from what is actually
@@ -270,7 +306,7 @@ async def run_pending(
     db: AsyncSession,
     max_concurrent: int,
     chunks_per_file: int,
-    identity: Callable[[str], str],
+    resolver: Callable[[str, str, str | None], Awaitable[DirectLink]],
     _on_start_for_test: Callable[[str], None] | None = None,
 ) -> None:
     """Pick up to `max_concurrent` queued items and download them concurrently.
@@ -297,8 +333,16 @@ async def run_pending(
     """
     db_lock = asyncio.Lock()
 
+    now = dt.datetime.utcnow()
     result = await db.execute(
-        select(DownloadItem).where(DownloadItem.status == "queued").limit(max_concurrent)
+        select(DownloadItem)
+        .where(
+            DownloadItem.status == "queued",
+            # Un item agendado sigue en "queued": es trabajo pendiente que
+            # todavía no toca, no un estado aparte.
+            (DownloadItem.retry_after.is_(None)) | (DownloadItem.retry_after <= now),
+        )
+        .limit(max_concurrent)
     )
     items = result.scalars().all()
 
@@ -307,14 +351,70 @@ async def run_pending(
         if _on_start_for_test:
             _on_start_for_test(item.id)
 
-    await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, identity) for item in items))
-
+    # Se capturan ANTES del gather: el camino de error de _run_one_item hace
+    # db.rollback(), que expira el estado en memoria de todas las instancias de
+    # la sesión compartida - también las de los items que sí terminaron bien.
+    # Leerles un atributo después dispara una recarga perezosa fuera del
+    # contexto greenlet y revienta con MissingGreenlet, y entonces el paquete
+    # nunca cambia de estado. Solo se nota cuando en un mismo lote conviven un
+    # éxito y un fallo.
     package_ids = {item.package_id for item in items}
+
+    await asyncio.gather(*(_run_one_item(db, db_lock, item, chunks_per_file, resolver) for item in items))
+
+    # Antes del veredicto: un grupo recién unido deja de tener parte de audio,
+    # y juzgar el paquete antes lo vería incompleto.
+    await merge_ready_groups(db)
+
     for package_id in package_ids:
-        pkg_result = await db.execute(select(Package).where(Package.id == package_id))
-        package = pkg_result.scalar_one()
-        items_result = await db.execute(select(DownloadItem).where(DownloadItem.package_id == package_id))
-        pkg_items = items_result.scalars().all()
-        if pkg_items and all(i.status == "completed" for i in pkg_items):
-            package.status = "completed"
+        await _apply_verdict(db, package_id)
+    await db.commit()
+
+
+def _verdict(pkg_items: list[DownloadItem]) -> str | None:
+    """Estado que le corresponde al paquete, o None si todavía no toca decidir.
+
+    Un paquete solo se juzga cuando ya no queda nada por hacer: "queued" y
+    "running" siguen en curso, y "paused"/"canceled" son decisiones del usuario
+    que no deben disparar un veredicto.
+    """
+    if not pkg_items:
+        return None
+    if any(i.status in ("queued", "running") for i in pkg_items):
+        return None
+    if all(i.status == "completed" for i in pkg_items):
+        return "completed"
+    if any(i.status == "error" for i in pkg_items):
+        # Con todos sus items fallidos el paquete se quedaba en "queued" para
+        # siempre, y el dashboard - que muestra el estado del paquete - se veía
+        # en 0% sin ninguna señal de error.
+        return "error"
+    return None
+
+
+async def _apply_verdict(db: AsyncSession, package_id: str) -> None:
+    pkg_result = await db.execute(select(Package).where(Package.id == package_id))
+    package = pkg_result.scalar_one_or_none()
+    if package is None:
+        return
+
+    items_result = await db.execute(select(DownloadItem).where(DownloadItem.package_id == package_id))
+    verdict = _verdict(list(items_result.scalars().all()))
+    if verdict is not None:
+        package.status = verdict
+
+
+async def reconcile_package_statuses(db: AsyncSession) -> None:
+    """Recalcula paquetes cuyo estado quedó contradiciendo a sus items.
+
+    El veredicto normal solo corre sobre los paquetes que tuvieron items en el
+    lote de ese tick. Un paquete cuyos items ya terminaron nunca vuelve a
+    entrar en un lote, así que si el proceso murió entre el commit del item y
+    el del paquete - o si la lógica del veredicto cambió, como pasó al agregar
+    el estado "error" - queda desincronizado para siempre y no hay nada que lo
+    corrija. Esto se ejecuta al arrancar y lo deja consistente.
+    """
+    result = await db.execute(select(Package).where(Package.status.in_(("queued", "running"))))
+    for package in result.scalars().all():
+        await _apply_verdict(db, package.id)
     await db.commit()

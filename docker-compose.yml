@@ -17,14 +17,16 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://cascade:${POSTGRES_PASSWORD:-cascade}@postgres:5432/cascade
-      JWT_SECRET: ${JWT_SECRET}
-      ADMIN_USERNAME: ${ADMIN_USERNAME}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       # Only the default for a fresh install - once the settings row exists,
       # the download folder saved from the UI wins.
       DOWNLOAD_ROOT: /downloads
     volumes:
-      - downloads:/downloads
+      # Volumen gestionado por Docker, no una carpeta del host. Acá el servidor
+      # solo estaciona archivos hasta que el usuario los retira por el
+      # navegador, y después los borra: es estado interno, y ponerlo en una
+      # carpeta que el usuario ve invita a que lo borre y rompa las descargas
+      # (que es exactamente lo que pasó).
+      - staging:/downloads
     restart: unless-stopped
     depends_on:
       postgres:
@@ -33,11 +35,15 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8080:80"
+      # Solo desde esta máquina. Ya no hay login: dejarlo en 0.0.0.0 pondría
+      # a disposición de cualquiera en la red la capacidad de encolar descargas
+      # y de cambiar los límites del motor. Para abrirlo a la red hay que
+      # decidirlo a propósito: BIND_ADDRESS=0.0.0.0 en el .env.
+      - "${BIND_ADDRESS:-127.0.0.1}:8080:80"
     restart: unless-stopped
     depends_on:
       - backend
 
 volumes:
   pg_data:
-  downloads:
+  staging:

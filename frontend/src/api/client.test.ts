@@ -1,12 +1,12 @@
 import { afterEach, expect, test, vi } from 'vitest'
-import { ApiError, apiFetch, UnauthorizedError } from './client'
+import { ApiError, apiFetch } from './client'
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
-test('apiFetch includes credentials and returns parsed json', async () => {
+test('apiFetch returns parsed json', async () => {
   const mockFetch = vi.fn().mockResolvedValue({
     ok: true,
     status: 200,
@@ -16,14 +16,21 @@ test('apiFetch includes credentials and returns parsed json', async () => {
 
   const result = await apiFetch('/health')
 
-  expect(mockFetch).toHaveBeenCalledWith('/health', expect.objectContaining({ credentials: 'include' }))
+  // Ya no viaja ninguna cookie de sesión: la identidad es la cabecera de dueño.
+  expect(mockFetch).toHaveBeenCalledWith('/health', expect.objectContaining({ headers: expect.any(Object) }))
   expect(result).toEqual({ hello: 'world' })
 })
 
-test('apiFetch throws UnauthorizedError on 401', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) }))
+test('apiFetch sends the browser owner token', async () => {
+  const mockFetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) })
+  vi.stubGlobal('fetch', mockFetch)
 
-  await expect(apiFetch('/packages')).rejects.toBeInstanceOf(UnauthorizedError)
+  await apiFetch('/packages')
+
+  // Sin login, esta cabecera es lo único que le dice al servidor de quién son
+  // las descargas que tiene que devolver.
+  const headers = mockFetch.mock.calls[0][1].headers
+  expect(headers['X-Cascade-Owner']).toMatch(/^[0-9a-f]{32}$/)
 })
 
 test('apiFetch surfaces the API detail message on other errors', async () => {

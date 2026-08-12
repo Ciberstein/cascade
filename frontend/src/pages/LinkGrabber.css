@@ -1,0 +1,161 @@
+/* Pegar, elegir, recibir es una secuencia real, así que acá sí vale marcarla:
+   quien llega a esta pantalla está en el medio de algo y conviene decirle
+   dónde. En el resto de la app no aparece, porque no habría nada que marcar. */
+.stages {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-stretch: 118%;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.stages__step--now {
+  color: var(--flow);
+}
+
+.stages__arrow {
+  color: var(--edge);
+}
+
+.grabber__title {
+  margin: 0 0 0.4rem;
+  font-size: clamp(1.3rem, 3vw, 1.7rem);
+  font-weight: 600;
+  font-stretch: 112%;
+}
+
+.grabber__lede {
+  margin: 0 0 1.75rem;
+  max-width: 52ch;
+  font-size: 0.85rem;
+  color: var(--slate);
+}
+
+.grabber__error {
+  margin-bottom: 1.5rem;
+}
+
+.grabber__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--edge);
+}
+
+.result {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 var(--gutter);
+  align-items: start;
+  padding: 0.9rem 0.75rem;
+  border-bottom: 1px solid var(--edge-soft);
+  transition: background var(--beat);
+}
+
+/* Lo elegido se levanta del fondo. Es la única señal que hace falta: la
+   casilla ya dice sí o no, esto dice cuánto vas a bajar de un vistazo. */
+.result--on {
+  background: var(--panel);
+}
+
+.result__check {
+  margin: 0.35rem 0 0;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--flow);
+}
+
+.result__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.result__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.result__name {
+  font-family: var(--data);
+  font-size: 0.88rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Un enlace caído se ve caído. Sigue en la lista porque explica por qué no se
+   puede tildar, pero no se disfraza de opción. */
+.result--dead .result__name {
+  color: var(--slate);
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+
+.result__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  font-family: var(--data);
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+
+.result__quality {
+  font-family: var(--data);
+  font-size: 0.78rem;
+  padding: 0.15rem 0.35rem;
+  background: var(--ground);
+}
+
+.result__why {
+  color: var(--fail);
+  overflow-wrap: anywhere;
+}
+
+.grabber__pending {
+  margin: 1.5rem 0;
+  font-size: 0.9rem;
+  color: var(--slate);
+}
+
+.grabber__foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-top: 2rem;
+}
+
+.grabber__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 16rem;
+  flex: 1;
+}
+
+.grabber__confirm {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.grabber__tally {
+  font-family: var(--data);
+  font-size: 0.78rem;
+  color: var(--slate);
+}

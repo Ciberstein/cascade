@@ -1,0 +1,55 @@
+/* La boca del canal. Está siempre a la vista porque pegar un enlace es lo
+   único que hay que hacer acá: esconderlo detrás de un botón y un diálogo era
+   un paso de más para la única acción de la herramienta. */
+.intake {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  gap: 0 var(--gutter);
+  align-items: stretch;
+  margin-bottom: 2.5rem;
+}
+
+/* Riel lleno: la entrada del canal siempre tiene caudal. Es el mismo elemento
+   que mide cada descarga más abajo. */
+.intake__rail {
+  border-radius: 1px;
+  background: linear-gradient(to bottom, var(--flow-lit), var(--flow));
+}
+
+.intake__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.intake__input {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--data);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  padding: 0.7rem 0.8rem;
+}
+
+.intake__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.intake__count {
+  margin: 0;
+  font-family: var(--data);
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+
+.intake__how {
+  margin: 0;
+  max-width: 44ch;
+  font-size: 0.82rem;
+  color: var(--slate);
+}

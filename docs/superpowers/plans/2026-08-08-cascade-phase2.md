@@ -255,7 +255,20 @@ async def test_direct_crawl_reports_the_url_as_a_single_file():
 @pytest.mark.asyncio
 async def test_direct_crawl_falls_back_to_a_usable_filename():
     result = await PLUGIN.crawl("http://example.com/")
+    # No "example.com": guardar el archivo con el nombre del host sería peor
+    # que un nombre genérico.
     assert result.files[0].filename == "download"
+
+
+@pytest.mark.asyncio
+async def test_two_trailing_slash_urls_do_not_collapse_to_the_same_name():
+    a = await PLUGIN.crawl("http://x/files/")
+    b = await PLUGIN.crawl("http://x/other/")
+
+    # Ambos van a la misma carpeta del paquete: si los dos se llamaran
+    # "download", el segundo pisaría al primero en el disco sin aviso.
+    assert a.files[0].filename == "files"
+    assert b.files[0].filename == "other"
 
 
 @pytest.mark.asyncio
@@ -279,11 +292,21 @@ Existe como plugin en vez de como caso especial para que el resto del código
 nunca tenga que ramificar entre "con plugin" y "sin plugin".
 """
 
+from urllib.parse import urlparse
+
 from app.plugins.base import CrawledFile, CrawlResult, DirectLink
 
 
 def filename_from_url(url: str) -> str:
-    name = url.rstrip("/").rsplit("/", 1)[-1]
+    """Último segmento del path de la URL, con "download" como último recurso.
+
+    Se mira el path y no la URL entera: para "http://example.com/" la URL
+    completa dejaría "example.com", es decir, guardaría el archivo con el
+    nombre del host. Y se recortan las barras finales antes de partir porque,
+    sin eso, toda URL terminada en "/" caería en "download" y dos carpetas
+    distintas del mismo paquete se pisarían entre sí en el disco.
+    """
+    name = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
     return name or "download"
 
 
@@ -2033,7 +2056,33 @@ async def _download_root(db: AsyncSession) -> str:
     return row.download_root if row is not None else _settings.download_root
 ```
 
-- [ ] **Step 6: Register the router in `backend/app/main.py`**
+- [ ] **Step 6: Register the router — en tres lugares, no en uno**
+
+Un router nuevo hay que darlo de alta en los tres sitios que enrutan hacia el backend. Saltarse los dos últimos hace que la API funcione en los tests y falle en el navegador con un 404/405, porque nginx sirve la SPA en esa ruta — y ninguna suite lo detecta: los tests del frontend mockean `fetch` y los del backend hablan con la app en proceso, así que nadie ejercita el ruteo real.
+
+En `backend/app/main.py`, agregar el import después de `from app.api.auth import router as auth_router`:
+
+```python
+from app.api.crawl_jobs import router as crawl_jobs_router
+```
+
+y después de `app.include_router(auth_router)`:
+
+```python
+app.include_router(crawl_jobs_router)
+```
+
+En `frontend/nginx.conf`, agregar el prefijo a la regex del proxy:
+
+```nginx
+    location ~ ^/(auth|packages|settings|crawl-jobs|health) {
+```
+
+En `frontend/vite.config.ts`, agregarlo a la lista del proxy de desarrollo:
+
+```typescript
+      ['/auth', '/packages', '/settings', '/crawl-jobs', '/health', '/ws'].map((path) => [
+```
 
 Agregar el import después de `from app.api.auth import router as auth_router`:
 
@@ -2059,7 +2108,7 @@ Expected: PASS (7 passed)
 - [ ] **Step 9: Commit**
 
 ```bash
-git add backend/app/api/crawl_jobs.py backend/app/schemas.py backend/app/main.py backend/app/api/packages.py backend/tests/test_api_crawl_jobs.py
+git add backend/app/api/crawl_jobs.py backend/app/schemas.py backend/app/main.py backend/app/api/packages.py backend/tests/conftest.py backend/tests/test_api_crawl_jobs.py
 git commit -m "feat: add crawl job endpoints and promotion to a download package"
 ```
 
@@ -2602,10 +2651,13 @@ async def _crawl_loop() -> None:
 En `lifespan`, reemplazar el bloque del task por:
 
 ```python
+    # Uno solo, compartido por ambos loops, para que apagar los despierte a los
+    # dos a la vez en lugar de que el segundo espere a que venza su intervalo.
+    stop = asyncio.Event()
     tasks = []
     if _settings.scheduler_enabled:
-        tasks.append(asyncio.create_task(_scheduler_loop()))
-        tasks.append(asyncio.create_task(_crawl_loop()))
+        tasks.append(asyncio.create_task(_scheduler_loop(stop)))
+        tasks.append(asyncio.create_task(_crawl_loop(stop)))
     try:
         yield
     finally:
@@ -2613,26 +2665,47 @@ En `lifespan`, reemplazar el bloque del task por:
         # y una cancelación puede caer dentro del commit y dejar la conexión a
         # medias, que es exactamente lo que envenenó la sesión compartida en
         # Fase 1. El flag solo se observa entre ticks.
-        _stop_loops.set()
+        stop.set()
         for task in tasks:
             await task
 ```
 
-Y declarar el flag junto a los intervalos, arriba del archivo:
+El flag entra **por parámetro**, no como global del módulo. Un `asyncio.Event` queda atado al primer event loop que lo espera, y cada test de pytest-asyncio corre en el suyo: un singleton lanzaría "bound to a different event loop" en el segundo test que lo usara, además de heredar el `set()` que dejó el lifespan anterior al apagarse.
+
+Cambiar la firma de ambos loops y su condición. En `_scheduler_loop`:
 
 ```python
-#: Se levanta al apagar. Los loops lo miran entre ticks, nunca a mitad de uno.
-_stop_loops = asyncio.Event()
+async def _scheduler_loop(stop: asyncio.Event | None = None) -> None:
+    """Corre ticks hasta que `stop` se levanta.
+
+    El Event entra por parámetro y no vive como global del módulo: un
+    `asyncio.Event` queda atado al primer event loop que lo espera, y cada
+    test de pytest-asyncio corre en el suyo, así que un singleton lanzaría
+    "bound to a different event loop" en el segundo test que lo usara -
+    además de heredar el set() que dejó el lifespan anterior al apagarse.
+    Quien no pase uno (los tests) recibe el suyo propio.
+    """
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
 ```
 
-Cambiar la condición de ambos loops para que lo respeten. En `_scheduler_loop` y en `_crawl_loop`, reemplazar `while True:` por `while not _stop_loops.is_set():`, y reemplazar la línea final `await asyncio.sleep(<intervalo>)` por:
+En `_crawl_loop`:
+
+```python
+async def _crawl_loop(stop: asyncio.Event | None = None) -> None:
+    """Mismo contrato que _scheduler_loop; ver allí por qué el Event no es global."""
+    stop = stop or asyncio.Event()
+    while not stop.is_set():
+```
+
+Y en ambos, reemplazar la línea final `await asyncio.sleep(<intervalo>)` por:
 
 ```python
         with suppress(TimeoutError):
             # wait_for sobre el flag en vez de sleep: apagar no espera un
             # intervalo entero, y despertar temprano es seguro porque el chequeo
             # del while ocurre antes del próximo tick.
-            await asyncio.wait_for(_stop_loops.wait(), timeout=<intervalo>)
+            await asyncio.wait_for(stop.wait(), timeout=<intervalo>)
 ```
 
 usando `_POLL_INTERVAL_SECONDS` y `_CRAWL_POLL_INTERVAL_SECONDS` respectivamente.
@@ -3208,6 +3281,8 @@ git commit -m "feat: add the LinkGrabber tray for reviewing discovered files"
 
 - [ ] **Step 1: Write the failing Dashboard test**
 
+**Antes de agregar nada**, esta tarea rompe dos tests que ya existen en `Dashboard.test.tsx` y que ejercitan el flujo viejo (`createPackage` y el botón "Agregar"): `creates a package from the modal and refreshes` y `keeps the modal open and shows why when creation fails`. El primero queda cubierto por el test nuevo de abajo y se reemplaza por él; el segundo hay que reescribirlo contra `crawlApi.createCrawlJob`, conservando lo que verifica (el modal sigue abierto y se ve el motivo). Lo mismo vale para los literales de `DownloadItem` de `Dashboard.test.tsx` y `PackageDetail.test.tsx`, que necesitan los campos `hoster` y `retry_after` nuevos.
+
 Agregar a `frontend/src/pages/Dashboard.test.tsx`, y agregar el import `import * as crawlApi from '../api/crawl'` al principio:
 
 ```tsx
@@ -3739,6 +3814,24 @@ rm .env
 Si algún paso falla, anotarlo como tarea de seguimiento al final de este plan antes de dar Fase 2 por cerrada — no parchear en silencio sin actualizar plan o spec.
 
 ---
+
+## Resultado de la verificación end-to-end (Task 19)
+
+Corrida contra el stack completo de Docker Compose. Migración `0001 -> 0002` aplicada, un autoindex de nginx servido dentro de la red de compose con `media/a.bin`, `media/b.bin` y `media/sub/c.bin`.
+
+Resultado: **OK**. El crawl descubrió los tres archivos con sus tamaños, incluido el de la subcarpeta (la recursión funciona), la promoción creó el paquete con `hoster=open_directory` en cada item, y los tres bajaron con md5 idéntico al origen.
+
+Un fallo encontrado y corregido, que ninguna suite podía atrapar: **el prefijo `/crawl-jobs` no estaba en el proxy de nginx ni en el de Vite**, así que nginx servía la SPA en esa ruta y la API respondía 405 desde el navegador aunque todos los tests pasaran. Los tests del frontend mockean `fetch` y los del backend hablan con la app en proceso: nadie ejercita el ruteo real. Corregido en `frontend/nginx.conf` y `frontend/vite.config.ts`, y la Task 9 Step 6 ahora dice explícitamente que un router se da de alta en tres lugares.
+
+## Revisión final y correcciones
+
+Una revisión de toda la rama contra el spec encontró diez defectos, y uno era grave: **escritura arbitraria de archivos**. `open_directory` tomaba el `filename` del *texto* del enlace en HTML ajeno mientras validaba solo el `href`, y `os.path.join` descarta su prefijo entero si el nombre es absoluto. Un sitio que sirviera `<a href="ep01.mkv">/etc/cron.d/pwned</a>` conseguía que el motor creara ese directorio y escribiera ahí bytes también controlados por él. Corregido saneando en el borde del crawler y con una comprobación de contención justo antes de abrir el archivo.
+
+Los otros que se corrigieron antes de dar la fase por cerrada: jobs de crawl que podían quedarse en `running` para siempre y, peor, seguir escribiendo sobre una sesión ya cerrada; `UnsupportedLink` que nunca caía en `direct` como manda el spec; recursión acotada en profundidad pero no en ancho ni en total; `retry_after` serializado sin huso (el navegador lo leía como hora local) y nunca limpiado al terminar; y colisiones de nombre al aplanar un árbol de carpetas, que ponían dos descargas a escribir el mismo archivo a la vez.
+
+Re-verificado end-to-end tras las correcciones: un árbol con dos archivos homónimos en carpetas distintas baja como `a.bin` y `a (2).bin`, cada uno con su checksum correcto.
+
+Otros tres desvíos del plan aparecieron durante la implementación y quedaron corregidos tanto en el código como en este documento: el nombre de archivo de `direct` (la URL entera exponía el host, y la corrección obvia hacía colisionar dos carpetas en `download`), el `git add` de la Task 9 que omitía `conftest.py`, y el `asyncio.Event` global de la Task 12 que se filtraba entre tests y volvía accidental el apagado.
 
 ## Fuera de alcance (confirmado)
 

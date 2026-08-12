@@ -1,46 +1,127 @@
-.package-row {
+/* Filas separadas por una línea de pelo, no tarjetas flotantes: las tarjetas
+   convierten una lista en un tablero, y acá lo que importa es la columna de
+   rieles corriendo por el mismo eje de arriba a abajo. */
+.row {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  gap: 0 var(--gutter);
+  align-items: stretch;
+  padding: 1.15rem 0;
+  border-bottom: 1px solid var(--edge-soft);
+}
+
+.row__body {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  gap: 0.5rem;
+  min-width: 0;
 }
 
-.package-row__header {
+.row__head {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 1rem;
 }
 
-.package-row__name {
-  font-weight: 600;
+.row__name {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.package-row__name--link {
+.row__name:hover:not(:disabled) {
+  color: var(--flow);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* La lectura exacta va en texto, al lado del riel: los números se comparan
+   mejor leídos que estimados sobre una barra. */
+.row__meter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0;
+  font-family: var(--data);
+  font-size: 0.8rem;
+  color: var(--slate);
+}
+
+.row__pct {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.row__note {
+  color: var(--warn);
+}
+
+.row__gone {
+  color: var(--slate);
+}
+
+.row__actions {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
+/* Controles secundarios sin caja. Cinco botones enmarcados por fila apagan la
+   única acción que importa cuando algo termina, que es descargar. */
+.row__ctrl {
+  padding: 0;
   border: none;
   background: none;
-  padding: 0;
-  color: var(--text);
-  text-align: left;
-}
-
-.package-row__name--link:hover {
-  color: var(--accent);
+  font-size: 0.8rem;
+  color: var(--slate);
   text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 4px;
+  transition: color var(--beat), text-decoration-color var(--beat);
 }
 
-.package-row__actions {
-  display: flex;
-  gap: 0.5rem;
+.row__ctrl:hover:not(:disabled) {
+  color: var(--flow);
+  text-decoration-color: currentColor;
 }
 
-.package-row__danger:hover:not(:disabled) {
-  border-color: var(--danger);
-  color: var(--danger);
+/* Después del anterior a propósito: misma especificidad, gana el que va
+   último, y lo que destruye no se pinta del color del caudal. */
+.row__ctrl--danger:hover:not(:disabled) {
+  color: var(--fail);
+  text-decoration-color: currentColor;
+}
+
+/* La entrega es el final del recorrido: es lo único que se ve como botón. */
+.row__take {
+  padding: 0.38rem 0.8rem;
+  border: 1px solid var(--flow);
+  border-radius: var(--r);
+  background: var(--flow);
+  color: var(--panel);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background var(--beat), border-color var(--beat);
+}
+
+/* Con :not(:disabled) y no a secas: la variante de varios archivos es un
+   <button>, y `button:hover:not(:disabled)` de la base le gana a un
+   `.row__take:hover` pelado - dejaba el texto del color del fondo. */
+.row__take:hover:not(:disabled) {
+  background: var(--flow-lit);
+  border-color: var(--flow-lit);
+  color: var(--panel);
 }

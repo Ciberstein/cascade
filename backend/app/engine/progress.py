@@ -11,8 +11,15 @@ class ThrottledBroadcaster:
         self._last_sent: dict[str, float] = {}
         self._lock = asyncio.Lock()
 
-    def report(self, item_id: str, downloaded_bytes: int) -> None:
-        self._latest[item_id] = {"type": "progress", "item_id": item_id, "downloaded_bytes": downloaded_bytes}
+    def report(self, item_id: str, downloaded_bytes: int, owner_id: str | None = None) -> None:
+        # owner_id viaja en el payload para que el manager sepa a quién
+        # entregarlo; lo quita antes de mandarlo al cliente.
+        self._latest[item_id] = {
+            "type": "progress",
+            "item_id": item_id,
+            "downloaded_bytes": downloaded_bytes,
+            "owner_id": owner_id,
+        }
         asyncio.create_task(self._maybe_send(item_id))
 
     async def _maybe_send(self, item_id: str) -> None:

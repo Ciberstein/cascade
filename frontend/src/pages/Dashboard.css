@@ -1,52 +1,45 @@
-.dashboard {
+.channel__head {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.dashboard__toolbar {
-  display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--edge);
 }
 
-.dashboard__title {
+.channel__count {
+  font-family: var(--data);
+  font-size: 0.78rem;
+  color: var(--slate);
+}
+
+.channel__error {
+  margin: 1rem 0 0;
+}
+
+/* El canal vacío es un riel vacío: la misma canaleta punteada que van a
+   ocupar las descargas, en vez de una caja de guiones que no dice nada. */
+.channel__empty {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  gap: 0 var(--gutter);
+  align-items: stretch;
+  padding: 1.15rem 0;
+}
+
+.channel__empty-rail {
+  min-height: 3.5rem;
+  border-radius: 1px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--edge) 0 3px,
+    transparent 3px 7px
+  );
+}
+
+.channel__empty-text {
   margin: 0;
-  font-size: 1.25rem;
-}
-
-.dashboard__toolbar-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.dashboard__primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-text);
-}
-
-.dashboard__list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.dashboard__empty {
-  margin: 0;
-  padding: 2.5rem 1rem;
-  text-align: center;
-  color: var(--text-muted);
-  border: 1px dashed var(--border);
-  border-radius: 8px;
-}
-
-.dashboard__error {
-  margin: 0;
-  padding: 0.6rem 0.8rem;
-  border: 1px solid var(--danger);
-  border-radius: 6px;
+  align-self: center;
   font-size: 0.9rem;
-  color: var(--danger);
+  color: var(--slate);
 }

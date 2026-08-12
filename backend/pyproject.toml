@@ -10,7 +10,6 @@ dependencies = [
     "alembic>=1.13",
     "httpx>=0.27",
     "pydantic-settings>=2.4",
-    "python-jose[cryptography]>=3.3",
     "passlib[bcrypt]>=1.7",
     # passlib 1.7.4's bcrypt-backend self-test (detect_wrap_bug) hashes a 255-byte
     # probe secret via a direct verify() call; bcrypt 5.0.0 is the first release to
@@ -19,6 +18,12 @@ dependencies = [
     # are verified compatible - keep this range until passlib is upgraded/replaced.
     "bcrypt>=4.0.1,<5.0",
     "websockets>=12.0",
+    # Parser HTML para los plugins. selectolax sobre bs4: es C puro, no arrastra
+    # soup-sieve/lxml, y el parseo ocurre dentro del loop de crawl.
+    "selectolax>=0.3.21",
+    # ~1750 sitios de video. Se actualiza seguido porque los sitios cambian
+    # seguido: conviene fijar un piso y dejar que suba, no clavarlo.
+    "yt-dlp>=2025.1.1",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +36,12 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Los tests live salen a internet: quedan fuera de la corrida normal para que
+# la suite no dependa de que un hoster de terceros esté arriba.
+addopts = "-m 'not live'"
+markers = [
+    "live: golpea el sitio real del hoster; correr a mano con -m live",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

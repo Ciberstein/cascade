@@ -1,19 +1,148 @@
-:root {
-  --bg: #14161a;
-  --surface: #1c1f26;
-  --surface-alt: #23272f;
-  --border: #2e333d;
-  --text: #e6e8ec;
-  --text-muted: #9aa2af;
-  --accent: #4f8cff;
-  --accent-text: #ffffff;
-  --danger: #e5534b;
-  --success: #3fb950;
+/* Cascade - sistema visual base.
+ *
+ * La idea rectora es el canal: un archivo entra por arriba, atraviesa el
+ * servidor y sale hacia el navegador sin quedarse. Todo lo de acá abajo
+ * existe para sostener esa lectura - por eso el medidor de progreso cae en
+ * vertical (ver FlowRail) y por eso la paleta es agua y piedra mojada en vez
+ * del gris de panel de control que usa cualquier gestor de descargas.
+ *
+ * Las fuentes se sirven desde /fonts: una herramienta que se define por no
+ * guardar nada del usuario no puede pedirle tipografías a un tercero en cada
+ * visita.
+ */
 
-  color-scheme: dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400 700;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/fonts/archivo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400 700;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('/fonts/archivo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/dmmono-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/dmmono-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/dmmono-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/dmmono-500-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+    U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  /* Agua y piedra mojada. Cada color tiene un trabajo: --flow es lo que se
+     mueve, --done lo que ya llegó, --warn lo que está seco (en pausa, en
+     espera) y --fail lo que se rompió. Nada más pide color. */
+  --ground: #e4ebea;
+  --panel: #f6f9f8;
+  --edge: #c4d2d1;
+  --edge-soft: #d5e0df;
+  --ink: #0c1b1e;
+  --slate: #5b7074;
+
+  --flow: #0d6a78;
+  --flow-lit: #2f9dab;
+  --done: #2c6e52;
+  --warn: #8a6212;
+  --fail: #a2342a;
+  --fail-lit: #c04033;
+
+  --r: 4px;
+  --rail-w: 3px;
+  --gutter: 1.75rem;
+
+  --display: 'Archivo', 'Segoe UI', system-ui, sans-serif;
+  --data: 'DM Mono', ui-monospace, 'Cascadia Mono', Menlo, monospace;
+
+  /* Duración única para todo lo que se mueve: el llenado del medidor, el
+     vaciado al entregar y los estados de control comparten reloj. */
+  --beat: 0.45s;
+
+  color-scheme: light;
+  font-family: var(--display);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.55;
+}
+
+/* La canaleta se angosta en pantallas chicas. Vive acá y no en cada
+   componente porque el riel del intake, el de cada fila y el del canal vacío
+   tienen que seguir alineados en el mismo eje. */
+@media (max-width: 34rem) {
+  :root {
+    --gutter: 1rem;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* El mismo canal de noche: no es otro diseño, son los mismos papeles
+       repartidos entre otros valores. */
+    --ground: #08181b;
+    --panel: #0e2226;
+    --edge: #1e383d;
+    --edge-soft: #162c30;
+    --ink: #deeae9;
+    --slate: #8ca3a6;
+
+    --flow: #38b4c0;
+    --flow-lit: #7fe0e5;
+    --done: #4fb489;
+    --warn: #d9a441;
+    --fail: #e0705e;
+    --fail-lit: #ef8b7b;
+
+    color-scheme: dark;
+  }
 }
 
 * {
@@ -23,44 +152,140 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--ground);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Etiqueta de sección: versaleta ancha. Es el único lugar donde la Archivo
+   se estira, y por eso marca jerarquía sin necesidad de tamaño ni de peso. */
+.eyebrow {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-stretch: 118%;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+/* Cifras, nombres de archivo y URLs: monoespaciada. No es decoración - hace
+   comparables los tamaños en una columna y hace legible una extensión al
+   final de un nombre largo. */
+.data {
+  font-family: var(--data);
+  font-variant-numeric: tabular-nums;
 }
 
 button {
   font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--surface-alt);
-  color: var(--text);
-  padding: 0.4rem 0.8rem;
+  border-radius: var(--r);
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--ink);
+  padding: 0.38rem 0.75rem;
+  transition: border-color var(--beat), color var(--beat), background var(--beat);
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--accent);
+  border-color: var(--flow);
+  color: var(--flow);
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
+/* Botón principal de cada pantalla. Uno solo por vista: si hay dos, ninguno
+   guía. */
+.primary {
+  background: var(--flow);
+  border-color: var(--flow);
+  color: var(--panel);
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--flow-lit);
+  border-color: var(--flow-lit);
+  color: var(--panel);
+}
+
+/* Acciones que destruyen o interrumpen: neutras hasta que el puntero llega. */
+.danger:hover:not(:disabled) {
+  border-color: var(--fail);
+  color: var(--fail);
+}
+
+/* La confirmación de algo que se pierde. Solo dentro de un diálogo, nunca
+   suelta en la página: un botón rojo permanente se vuelve paisaje. */
+.destructive {
+  background: var(--fail);
+  border-color: var(--fail);
+  color: var(--panel);
+}
+
+.destructive:hover:not(:disabled) {
+  background: var(--fail-lit);
+  border-color: var(--fail-lit);
+  color: var(--panel);
+}
+
+/* Todo campo se levanta del fondo, en claro y en oscuro: es la señal de "acá
+   se escribe", y mezclar campos hundidos con campos levantados hace que
+   algunos no parezcan campos. */
 input,
 textarea,
 select {
   font: inherit;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  font-size: 0.9rem;
+  border-radius: var(--r);
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--ink);
   padding: 0.45rem 0.6rem;
+  transition: border-color var(--beat);
+}
+
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: var(--slate);
 }
 
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-button:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--flow);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--flow);
+}
+
+/* Un mensaje de error dice qué pasó y no se disculpa; el color lo separa del
+   resto sin gritar. */
+.notice {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-left: 2px solid var(--fail);
+  background: var(--panel);
+  font-size: 0.85rem;
+  color: var(--fail);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

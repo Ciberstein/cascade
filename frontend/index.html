@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#e4ebea" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#08181b" media="(prefers-color-scheme: dark)" />
+    <meta
+      name="description"
+      content="Cascade descarga un enlace por vos y te entrega el archivo. El servidor es un lugar de paso: borra su copia al entregarla."
+    />
+    <!-- La Archivo dibuja la marca y todos los títulos: sin precarga, la
+         primera pantalla se pinta con la fuente del sistema y salta. -->
+    <link
+      rel="preload"
+      href="/fonts/archivo-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <title>Cascade</title>
   </head>
   <body>

@@ -1,0 +1,57 @@
+.masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--edge);
+  margin-bottom: 2.25rem;
+}
+
+.masthead__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+/* El mismo riel que mide cada descarga, a escala de logo. La marca es el
+   mecanismo. */
+.masthead__rail {
+  width: var(--rail-w);
+  height: 1.35rem;
+  border-radius: 1px;
+  background: linear-gradient(to bottom, var(--flow-lit), var(--flow));
+}
+
+.masthead__word {
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-stretch: 122%;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* La frase pesa más que la marca a propósito: es lo que hay que entender al
+   llegar, y la marca ya está firmada arriba. */
+.masthead__note {
+  margin: 0.5rem 0 0;
+  max-width: 42ch;
+  font-size: 1.05rem;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.masthead__nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 34rem) {
+  .masthead {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+}

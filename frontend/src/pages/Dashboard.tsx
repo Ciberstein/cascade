@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useState } from 'react'
-import { createPackage, listPackages, updatePackageStatus } from '../api/packages'
-import { UnauthorizedError } from '../api/client'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { deletePackage, listPackages, renamePackage, updatePackageStatus } from '../api/packages'
+import { createCrawlJob } from '../api/crawl'
+import { autoDownloadFinished } from '../autoDownload'
 import { useProgressSocket } from '../ws/useProgressSocket'
 import PackageRow from '../components/PackageRow'
-import AddLinksModal from '../components/AddLinksModal'
+import LinkIntake from '../components/LinkIntake'
+import Masthead from '../components/Masthead'
+import ConfirmDialog from '../components/ConfirmDialog'
+import RenameDialog from '../components/RenameDialog'
 import PackageDetail from './PackageDetail'
 import SettingsPage from './Settings'
+import Account from './Account'
+import LinkGrabber from './LinkGrabber'
 import type { Package, PackageAction } from '../types'
 import './Dashboard.css'
-
-interface Props {
-  onUnauthorized?: () => void
-}
 
 /**
  * Which screen is showing.
@@ -20,7 +22,12 @@ interface Props {
  * than pulling in a router. Detail holds an id (not the package object) so the
  * background poll keeps feeding it fresh data.
  */
-type View = { name: 'list' } | { name: 'detail'; packageId: string } | { name: 'settings' }
+type View =
+  | { name: 'list' }
+  | { name: 'detail'; packageId: string }
+  | { name: 'settings' }
+  | { name: 'grabber'; jobId: string }
+  | { name: 'account' }
 
 /**
  * How often the package list is refetched.
@@ -32,33 +39,47 @@ type View = { name: 'list' } | { name: 'detail'; packageId: string } | { name: '
  */
 const REFRESH_INTERVAL_MS = 3000
 
-export default function Dashboard({ onUnauthorized }: Props) {
+/**
+ * Lo que se le está preguntando al usuario.
+ *
+ * Los diálogos viven acá y no en la fila: la fila avisa la intención, y el
+ * único lugar que sabe qué se está por hacer con qué paquete es el que tiene
+ * la lista y las llamadas a la API.
+ */
+type Ask =
+  | { kind: 'delete'; id: string; name: string }
+  | { kind: 'rename'; id: string; name: string }
+
+export default function Dashboard() {
   const [packages, setPackages] = useState<Package[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showModal, setShowModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [view, setView] = useState<View>({ name: 'list' })
+  const [asking, setAsking] = useState<Ask | null>(null)
+  // Cubre la ventana entre que se dispara una descarga y que el servidor la
+  // marca retirada, donde un sondeo intermedio la dispararía de nuevo.
+  const triggered = useRef<Set<string>>(new Set())
 
-  const { progressByItemId, unauthorized } = useProgressSocket()
+  const { progressByItemId } = useProgressSocket()
 
   const refresh = useCallback(async () => {
     try {
-      setPackages(await listPackages())
+      const fetched = await listPackages()
+      setPackages(fetched)
+      // Apenas termina, se lo lleva el navegador: el servidor es un lugar de
+      // paso y lo libera en cuanto lo entrega.
+      autoDownloadFinished(fetched, triggered.current)
       setError(null)
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       // A failed poll is usually the backend restarting. Keep the last known
       // list on screen and say so, rather than blanking the dashboard.
       setError(e instanceof Error ? e.message : 'No se pudo cargar la lista de paquetes')
     } finally {
       setLoaded(true)
     }
-  }, [onUnauthorized])
+  }, [])
 
   useEffect(() => {
     void refresh()
@@ -66,29 +87,36 @@ export default function Dashboard({ onUnauthorized }: Props) {
     return () => clearInterval(timer)
   }, [refresh])
 
-  // The socket rejecting the session is the same signal as a 401 on the REST
-  // side; either one means the cookie is gone or expired.
-  useEffect(() => {
-    if (unauthorized) onUnauthorized?.()
-  }, [unauthorized, onUnauthorized])
-
-  async function handleCreate(name: string, urls: string[]) {
+  async function handleAnalyze(urls: string[]) {
     setCreating(true)
     setCreateError(null)
     try {
-      await createPackage(name, urls)
-      setShowModal(false)
-      await refresh()
+      const job = await createCrawlJob(urls.join('\n'))
+      setView({ name: 'grabber', jobId: job.id })
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
-      // Deliberately leaves the modal open: closing it would discard the URLs
-      // the user just pasted, with nothing to retry from.
-      setCreateError(e instanceof Error ? e.message : 'No se pudo crear el paquete')
+      // Se queda en la misma pantalla: cambiar de vista tiraría los enlaces
+      // recién pegados.
+      setCreateError(e instanceof Error ? e.message : 'No se pudo analizar los enlaces')
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleRename(id: string, name: string) {
+    try {
+      await renamePackage(id, name)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo renombrar el paquete')
+    }
+  }
+
+  async function handleDelete(id: string) {
+    try {
+      await deletePackage(id)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el paquete')
     }
   }
 
@@ -97,17 +125,39 @@ export default function Dashboard({ onUnauthorized }: Props) {
       await updatePackageStatus(id, status)
       await refresh()
     } catch (e) {
-      if (e instanceof UnauthorizedError) {
-        onUnauthorized?.()
-        return
-      }
       setError(e instanceof Error ? e.message : 'No se pudo actualizar el paquete')
     }
   }
 
-  if (view.name === 'settings') {
+  if (view.name === 'account') {
     return (
-      <SettingsPage onClose={() => setView({ name: 'list' })} onUnauthorized={onUnauthorized} />
+      <Account
+        onClose={() => setView({ name: 'list' })}
+        onIdentityChanged={() => {
+          // Iniciar sesión cambia el token de dueño: la lista que se estaba
+          // mostrando ya no es la de este navegador.
+          setPackages([])
+          setView({ name: 'list' })
+          void refresh()
+        }}
+      />
+    )
+  }
+
+  if (view.name === 'settings') {
+    return <SettingsPage onClose={() => setView({ name: 'list' })} />
+  }
+
+  if (view.name === 'grabber') {
+    return (
+      <LinkGrabber
+        jobId={view.jobId}
+        onBack={() => setView({ name: 'list' })}
+        onDone={() => {
+          setView({ name: 'list' })
+          void refresh()
+        }}
+      />
     )
   }
 
@@ -127,28 +177,47 @@ export default function Dashboard({ onUnauthorized }: Props) {
   }
 
   return (
-    <div className="dashboard">
-      <div className="dashboard__toolbar">
-        <h1 className="dashboard__title">Descargas</h1>
-        <div className="dashboard__toolbar-actions">
-          <button onClick={() => setView({ name: 'settings' })}>Configuración</button>
-          <button className="dashboard__primary" onClick={() => setShowModal(true)}>
-            Agregar enlaces
-          </button>
+    <>
+      <Masthead note="El archivo pasa por el servidor y no se queda.">
+        <button onClick={() => setView({ name: 'account' })}>Cuenta</button>
+        <button onClick={() => setView({ name: 'settings' })}>Configuración</button>
+      </Masthead>
+
+      {/* Pegar un enlace es lo único que hay que hacer acá, así que está a la
+          vista y no detrás de un botón que abre un diálogo. */}
+      <LinkIntake
+        onSubmit={(urls) => void handleAnalyze(urls)}
+        submitting={creating}
+        error={createError}
+      />
+
+      <section>
+        <div className="channel__head">
+          {/* La metáfora del canal la sostiene el diseño; las palabras nombran
+              lo que el usuario reconoce. */}
+          <h1 className="eyebrow">Tus descargas</h1>
+          {packages.length > 0 && (
+            <span className="channel__count">
+              {packages.length} paquete{packages.length === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
-      </div>
 
-      {error && (
-        <p className="dashboard__error" role="alert">
-          {error}
-        </p>
-      )}
+        {error && (
+          <p className="notice channel__error" role="alert">
+            {error}
+          </p>
+        )}
 
-      {loaded && packages.length === 0 ? (
-        <p className="dashboard__empty">No hay descargas todavía. Agregá enlaces para empezar.</p>
-      ) : (
-        <div className="dashboard__list">
-          {packages.map((pkg) => (
+        {loaded && packages.length === 0 ? (
+          <div className="channel__empty">
+            <div className="channel__empty-rail" aria-hidden="true" />
+            <p className="channel__empty-text">
+              No hay descargas todavía. Pegá un enlace acá arriba.
+            </p>
+          </div>
+        ) : (
+          packages.map((pkg) => (
             <PackageRow
               key={pkg.id}
               package={pkg}
@@ -156,23 +225,40 @@ export default function Dashboard({ onUnauthorized }: Props) {
               onPause={(id) => void handleStatusChange(id, 'paused')}
               onResume={(id) => void handleStatusChange(id, 'queued')}
               onCancel={(id) => void handleStatusChange(id, 'canceled')}
+              onRename={(id) => setAsking({ kind: 'rename', id, name: pkg.name })}
+              onDelete={(id) => setAsking({ kind: 'delete', id, name: pkg.name })}
               onOpen={(id) => setView({ name: 'detail', packageId: id })}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </section>
 
-      {showModal && (
-        <AddLinksModal
-          onSubmit={(name, urls) => void handleCreate(name, urls)}
-          onClose={() => {
-            setShowModal(false)
-            setCreateError(null)
+      {asking?.kind === 'delete' && (
+        <ConfirmDialog
+          title="Quitar de la lista"
+          // "Eliminar" suena a que borra el archivo, y no lo hace: lo que ya
+          // llegó al equipo del usuario no lo toca nadie.
+          body={`«${asking.name}» sale de tu lista. Lo que ya bajaste a tu equipo se queda donde está.`}
+          confirmLabel="Quitar"
+          destructive
+          onConfirm={() => {
+            void handleDelete(asking.id)
+            setAsking(null)
           }}
-          submitting={creating}
-          error={createError}
+          onCancel={() => setAsking(null)}
         />
       )}
-    </div>
+
+      {asking?.kind === 'rename' && (
+        <RenameDialog
+          initial={asking.name}
+          onConfirm={(name) => {
+            void handleRename(asking.id, name)
+            setAsking(null)
+          }}
+          onCancel={() => setAsking(null)}
+        />
+      )}
+    </>
   )
 }

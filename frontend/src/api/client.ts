@@ -1,5 +1,4 @@
-/** Thrown on 401 so the app shell can drop back to the login screen. */
-export class UnauthorizedError extends Error {}
+import { ownerToken } from './owner'
 
 export class ApiError extends Error {
   status: number
@@ -13,19 +12,19 @@ export class ApiError extends Error {
 /**
  * Calls the backend on a relative path (same-origin in prod, proxied in dev).
  *
- * The session token lives in an httpOnly cookie, so there is no header to
- * attach here - `credentials: 'include'` is what makes the browser send it.
+ * No hay login: la cabecera de dueño es lo que identifica a este navegador y
+ * decide qué descargas devuelve el servidor.
  */
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     ...options,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Cascade-Owner': ownerToken(),
+      ...options.headers,
+    },
   })
 
-  if (response.status === 401) {
-    throw new UnauthorizedError('Not authenticated')
-  }
   if (!response.ok) {
     throw new ApiError(response.status, await errorMessage(response, path))
   }

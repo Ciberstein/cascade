@@ -2,9 +2,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 import Dashboard from './Dashboard'
 import * as packagesApi from '../api/packages'
+import * as crawlApi from '../api/crawl'
 import * as settingsApi from '../api/settings'
 import * as socketHook from '../ws/useProgressSocket'
-import { UnauthorizedError } from '../api/client'
 import type { Package } from '../types'
 
 afterEach(() => {
@@ -12,8 +12,8 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-function stubSocket(progressByItemId: Record<string, number> = {}, unauthorized = false) {
-  vi.spyOn(socketHook, 'useProgressSocket').mockReturnValue({ progressByItemId, unauthorized })
+function stubSocket(progressByItemId: Record<string, number> = {}) {
+  vi.spyOn(socketHook, 'useProgressSocket').mockReturnValue({ progressByItemId })
 }
 
 const pkg: Package = { id: 'p1', name: 'Pkg 1', status: 'running', target_dir: '/x', items: [] }
@@ -45,44 +45,47 @@ test('refetches so status transitions appear without a reload', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  await vi.waitFor(() => expect(screen.getByText('running')).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByText('bajando')).toBeInTheDocument())
 
   // The WS feed only carries byte counts - queued -> running -> completed
   // would otherwise sit stale on screen until the user reloaded the page.
   await vi.advanceTimersByTimeAsync(4000)
-  await vi.waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByText('listo')).toBeInTheDocument())
   expect(list.mock.calls.length).toBeGreaterThan(1)
 })
 
-test('creates a package from the modal and refreshes', async () => {
-  const list = vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
-  const create = vi.spyOn(packagesApi, 'createPackage').mockResolvedValue(pkg)
-  stubSocket()
-
-  render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Agregar enlaces' }))
-
-  fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Agregar' }))
-
-  await waitFor(() => expect(create).toHaveBeenCalledWith('Paquete sin nombre', ['https://x/a.zip']))
-  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-  expect(list.mock.calls.length).toBeGreaterThan(1)
-})
-
-test('keeps the modal open and shows why when creation fails', async () => {
+test('pasting links creates a crawl job and opens the tray', async () => {
   vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
-  vi.spyOn(packagesApi, 'createPackage').mockRejectedValue(new Error('Carpeta de destino no escribible'))
+  const create = vi.spyOn(crawlApi, 'createCrawlJob').mockResolvedValue({
+    id: 'j1', raw_input: 'http://x/a.zip', status: 'pending', error_message: null, results: [],
+  })
+  vi.spyOn(crawlApi, 'getCrawlJob').mockResolvedValue({
+    id: 'j1', raw_input: 'http://x/a.zip', status: 'done', error_message: null,
+    results: [{ id: 'r1', url: 'http://x/a.zip', filename: 'a.zip', size: 10, hoster: 'direct', status: 'ok', error_message: null, variants: [] }],
+  })
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Agregar enlaces' }))
-  fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Agregar' }))
+  fireEvent.change(await screen.findByLabelText('Enlaces'), { target: { value: 'http://x/a.zip' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
 
-  // Closing the modal here would throw away the URLs the user just pasted.
+  // Pegar no crea un paquete: abre el análisis y el usuario confirma qué baja.
+  await waitFor(() => expect(create).toHaveBeenCalledWith('http://x/a.zip'))
+  expect(await screen.findByText('a.zip')).toBeInTheDocument()
+})
+
+test('keeps the pasted links on screen and shows why when the crawl job fails to create', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
+  vi.spyOn(crawlApi, 'createCrawlJob').mockRejectedValue(new Error('Carpeta de destino no escribible'))
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.change(await screen.findByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
+
+  // Cambiar de pantalla acá tiraría las URLs que el usuario acaba de pegar.
   expect(await screen.findByText('Carpeta de destino no escribible')).toBeInTheDocument()
-  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  expect(screen.getByLabelText('Enlaces')).toHaveValue('https://x/a.zip')
 })
 
 test('maps the pause control to the status the API accepts', async () => {
@@ -109,6 +112,8 @@ test('clicking a package name shows its detail view', async () => {
           total_size: 100,
           downloaded_bytes: 10,
           error_message: null,
+          hoster: 'direct',
+          retry_after: null, file_removed: false, retrieved: false, merge_role: null,
         },
       ],
     },
@@ -125,10 +130,10 @@ test('clicking a package name shows its detail view', async () => {
 test('opens and closes the settings view', async () => {
   vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
   vi.spyOn(settingsApi, 'getSettings').mockResolvedValue({
-    download_root: '/downloads',
     max_concurrent_downloads: 3,
     chunks_per_file: 4,
     max_speed_kbps: 0,
+    max_concurrent_crawls: 5,
   })
   stubSocket()
 
@@ -136,7 +141,7 @@ test('opens and closes the settings view', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Configuración' }))
 
   fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
-  expect(await screen.findByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument()
+  expect(await screen.findByLabelText('Enlaces')).toBeInTheDocument()
 })
 
 test('falls back to the list when the open package disappears', async () => {
@@ -152,25 +157,73 @@ test('falls back to the list when the open package disappears', async () => {
   expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument()
 
   await vi.advanceTimersByTimeAsync(4000)
-  await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByLabelText('Enlaces')).toBeInTheDocument())
 })
 
-test('reports an expired session to the shell', async () => {
-  vi.spyOn(packagesApi, 'listPackages').mockRejectedValue(new UnauthorizedError('nope'))
+
+test('deleting asks in the app, not in a browser popup', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const remove = vi.spyOn(packagesApi, 'deletePackage').mockResolvedValue(undefined)
   stubSocket()
-  const onUnauthorized = vi.fn()
 
-  render(<Dashboard onUnauthorized={onUnauthorized} />)
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }))
 
-  await waitFor(() => expect(onUnauthorized).toHaveBeenCalled())
+  // El diálogo nombra el paquete y aclara qué NO se pierde: "eliminar" suena a
+  // que borra el archivo bajado, y no lo hace.
+  const dialog = await screen.findByRole('dialog')
+  expect(dialog).toHaveTextContent('Pkg 1')
+  expect(dialog).toHaveTextContent(/se queda donde está/)
+  expect(remove).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Quitar' }))
+  await waitFor(() => expect(remove).toHaveBeenCalledWith('p1'))
 })
 
-test('reports an expired session detected by the socket', async () => {
-  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
-  stubSocket({}, true)
-  const onUnauthorized = vi.fn()
+test('backing out of the delete dialog deletes nothing', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const remove = vi.spyOn(packagesApi, 'deletePackage').mockResolvedValue(undefined)
+  stubSocket()
 
-  render(<Dashboard onUnauthorized={onUnauthorized} />)
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }))
+  fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape' })
 
-  await waitFor(() => expect(onUnauthorized).toHaveBeenCalled())
+  // Escape cierra, como en cualquier diálogo del sistema que este reemplaza.
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(remove).not.toHaveBeenCalled()
+})
+
+test('renaming carries the current name in and sends the trimmed one out', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const rename = vi.spyOn(packagesApi, 'renamePackage').mockResolvedValue(pkg)
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Renombrar' }))
+
+  // Entra escrito el nombre actual: renombrar suele ser retocar, no empezar
+  // de cero.
+  const field = await screen.findByLabelText('Nombre del paquete')
+  expect(field).toHaveValue('Pkg 1')
+
+  fireEvent.change(field, { target: { value: '  Backrooms  ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar nombre' }))
+
+  await waitFor(() => expect(rename).toHaveBeenCalledWith('p1', 'Backrooms'))
+})
+
+test('an empty name cannot be submitted', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const rename = vi.spyOn(packagesApi, 'renamePackage').mockResolvedValue(pkg)
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Renombrar' }))
+  fireEvent.change(await screen.findByLabelText('Nombre del paquete'), { target: { value: '   ' } })
+
+  // La API lo rechaza; el botón muerto lo dice antes de viajar.
+  expect(screen.getByRole('button', { name: 'Guardar nombre' })).toBeDisabled()
+  fireEvent.keyDown(screen.getByLabelText('Nombre del paquete'), { key: 'Enter' })
+  expect(rename).not.toHaveBeenCalled()
 })

@@ -3,7 +3,8 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base, Chunk, DownloadItem, Package, User
+from tests.conftest import TEST_OWNER
+from app.models import Base, Chunk, DownloadItem, Package
 
 
 @pytest_asyncio.fixture
@@ -19,11 +20,7 @@ async def session():
 
 @pytest.mark.asyncio
 async def test_package_with_items_and_chunks(session):
-    user = User(username="admin", password_hash="x")
-    session.add(user)
-    await session.flush()
-
-    package = Package(name="Test pkg", status="queued", target_dir="/downloads/test-pkg")
+    package = Package(name="Test pkg", status="queued", target_dir="/downloads/test-pkg", owner_id=TEST_OWNER)
     session.add(package)
     await session.flush()
 

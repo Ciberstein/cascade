@@ -22,6 +22,7 @@ async def download_chunk(
     on_flush: Callable[[int], None] | None = None,
     flush_interval_seconds: float = FLUSH_INTERVAL_SECONDS,
     rate_limiter: RateLimiter | None = None,
+    headers: dict[str, str] | None = None,
 ) -> None:
     """Download `start`-`end` of `url` into `dest_path` at its true offset.
 
@@ -60,9 +61,14 @@ async def download_chunk(
 
     for attempt in range(max_retries):
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                headers = {"Range": f"bytes={range_start}-{end}"}
-                async with client.stream("GET", url, headers=headers) as response:
+            # Mismo motivo que en el probe: sin seguir redirecciones, un enlace
+            # que apunta a un CDN falla. El Range viaja en el request y httpx lo
+            # reenvía al destino.
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                # El Range va último a propósito: lo calcula el motor de chunks,
+                # y que un plugin lo pise corrompería el archivo en silencio.
+                request_headers = {**(headers or {}), "Range": f"bytes={range_start}-{end}"}
+                async with client.stream("GET", url, headers=request_headers) as response:
                     if response.status_code not in (200, 206):
                         raise RuntimeError(f"Unexpected status {response.status_code}")
 

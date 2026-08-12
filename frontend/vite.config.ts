@@ -13,7 +13,7 @@ export default defineConfig({
     // needed. Mirrors the router prefixes registered in backend/app/main.py;
     // ws:true covers the /ws progress socket's upgrade handshake.
     proxy: Object.fromEntries(
-      ['/auth', '/packages', '/settings', '/health', '/ws'].map((path) => [
+      ['/account', '/packages', '/settings', '/crawl-jobs', '/health', '/ws'].map((path) => [
         path,
         { target: 'http://localhost:8000', changeOrigin: true, ws: true },
       ]),
