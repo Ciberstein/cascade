@@ -4,15 +4,16 @@ import { createCrawlJob } from '../api/crawl'
 import { autoDownloadFinished } from '../autoDownload'
 import { useProgressSocket } from '../ws/useProgressSocket'
 import PackageRow from '../components/PackageRow'
-import AddLinksModal from '../components/AddLinksModal'
+import LinkIntake from '../components/LinkIntake'
+import Masthead from '../components/Masthead'
+import ConfirmDialog from '../components/ConfirmDialog'
+import RenameDialog from '../components/RenameDialog'
 import PackageDetail from './PackageDetail'
 import SettingsPage from './Settings'
 import Account from './Account'
 import LinkGrabber from './LinkGrabber'
 import type { Package, PackageAction } from '../types'
 import './Dashboard.css'
-
-
 
 /**
  * Which screen is showing.
@@ -38,14 +39,25 @@ type View =
  */
 const REFRESH_INTERVAL_MS = 3000
 
+/**
+ * Lo que se le está preguntando al usuario.
+ *
+ * Los diálogos viven acá y no en la fila: la fila avisa la intención, y el
+ * único lugar que sabe qué se está por hacer con qué paquete es el que tiene
+ * la lista y las llamadas a la API.
+ */
+type Ask =
+  | { kind: 'delete'; id: string; name: string }
+  | { kind: 'rename'; id: string; name: string }
+
 export default function Dashboard() {
   const [packages, setPackages] = useState<Package[]>([])
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showModal, setShowModal] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [view, setView] = useState<View>({ name: 'list' })
+  const [asking, setAsking] = useState<Ask | null>(null)
   // Cubre la ventana entre que se dispara una descarga y que el servidor la
   // marca retirada, donde un sondeo intermedio la dispararía de nuevo.
   const triggered = useRef<Set<string>>(new Set())
@@ -80,10 +92,10 @@ export default function Dashboard() {
     setCreateError(null)
     try {
       const job = await createCrawlJob(urls.join('\n'))
-      setShowModal(false)
       setView({ name: 'grabber', jobId: job.id })
     } catch (e) {
-      // El modal queda abierto: cerrarlo tiraría los enlaces recién pegados.
+      // Se queda en la misma pantalla: cambiar de vista tiraría los enlaces
+      // recién pegados.
       setCreateError(e instanceof Error ? e.message : 'No se pudo analizar los enlaces')
     } finally {
       setCreating(false)
@@ -100,11 +112,6 @@ export default function Dashboard() {
   }
 
   async function handleDelete(id: string) {
-    // Se avisa que el archivo queda: "eliminar" suena a que borra el archivo,
-    // y no lo hace.
-    if (!window.confirm('¿Quitar este paquete de la lista? Los archivos ya descargados no se borran.')) {
-      return
-    }
     try {
       await deletePackage(id)
       await refresh()
@@ -138,9 +145,7 @@ export default function Dashboard() {
   }
 
   if (view.name === 'settings') {
-    return (
-      <SettingsPage onClose={() => setView({ name: 'list' })} />
-    )
+    return <SettingsPage onClose={() => setView({ name: 'list' })} />
   }
 
   if (view.name === 'grabber') {
@@ -172,29 +177,47 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="dashboard">
-      <div className="dashboard__toolbar">
-        <h1 className="dashboard__title">Descargas</h1>
-        <div className="dashboard__toolbar-actions">
-          <button onClick={() => setView({ name: 'account' })}>Cuenta</button>
-          <button onClick={() => setView({ name: 'settings' })}>Configuración</button>
-          <button className="dashboard__primary" onClick={() => setShowModal(true)}>
-            Agregar enlaces
-          </button>
+    <>
+      <Masthead note="El archivo pasa por el servidor y no se queda.">
+        <button onClick={() => setView({ name: 'account' })}>Cuenta</button>
+        <button onClick={() => setView({ name: 'settings' })}>Configuración</button>
+      </Masthead>
+
+      {/* Pegar un enlace es lo único que hay que hacer acá, así que está a la
+          vista y no detrás de un botón que abre un diálogo. */}
+      <LinkIntake
+        onSubmit={(urls) => void handleAnalyze(urls)}
+        submitting={creating}
+        error={createError}
+      />
+
+      <section>
+        <div className="channel__head">
+          {/* La metáfora del canal la sostiene el diseño; las palabras nombran
+              lo que el usuario reconoce. */}
+          <h1 className="eyebrow">Tus descargas</h1>
+          {packages.length > 0 && (
+            <span className="channel__count">
+              {packages.length} paquete{packages.length === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
-      </div>
 
-      {error && (
-        <p className="dashboard__error" role="alert">
-          {error}
-        </p>
-      )}
+        {error && (
+          <p className="notice channel__error" role="alert">
+            {error}
+          </p>
+        )}
 
-      {loaded && packages.length === 0 ? (
-        <p className="dashboard__empty">No hay descargas todavía. Agregá enlaces para empezar.</p>
-      ) : (
-        <div className="dashboard__list">
-          {packages.map((pkg) => (
+        {loaded && packages.length === 0 ? (
+          <div className="channel__empty">
+            <div className="channel__empty-rail" aria-hidden="true" />
+            <p className="channel__empty-text">
+              No hay descargas todavía. Pegá un enlace acá arriba.
+            </p>
+          </div>
+        ) : (
+          packages.map((pkg) => (
             <PackageRow
               key={pkg.id}
               package={pkg}
@@ -202,25 +225,40 @@ export default function Dashboard() {
               onPause={(id) => void handleStatusChange(id, 'paused')}
               onResume={(id) => void handleStatusChange(id, 'queued')}
               onCancel={(id) => void handleStatusChange(id, 'canceled')}
-              onRename={(id, name) => void handleRename(id, name)}
-              onDelete={(id) => void handleDelete(id)}
+              onRename={(id) => setAsking({ kind: 'rename', id, name: pkg.name })}
+              onDelete={(id) => setAsking({ kind: 'delete', id, name: pkg.name })}
               onOpen={(id) => setView({ name: 'detail', packageId: id })}
             />
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </section>
 
-      {showModal && (
-        <AddLinksModal
-          onSubmit={(urls) => void handleAnalyze(urls)}
-          onClose={() => {
-            setShowModal(false)
-            setCreateError(null)
+      {asking?.kind === 'delete' && (
+        <ConfirmDialog
+          title="Quitar de la lista"
+          // "Eliminar" suena a que borra el archivo, y no lo hace: lo que ya
+          // llegó al equipo del usuario no lo toca nadie.
+          body={`«${asking.name}» sale de tu lista. Lo que ya bajaste a tu equipo se queda donde está.`}
+          confirmLabel="Quitar"
+          destructive
+          onConfirm={() => {
+            void handleDelete(asking.id)
+            setAsking(null)
           }}
-          submitting={creating}
-          error={createError}
+          onCancel={() => setAsking(null)}
         />
       )}
-    </div>
+
+      {asking?.kind === 'rename' && (
+        <RenameDialog
+          initial={asking.name}
+          onConfirm={(name) => {
+            void handleRename(asking.id, name)
+            setAsking(null)
+          }}
+          onCancel={() => setAsking(null)}
+        />
+      )}
+    </>
   )
 }

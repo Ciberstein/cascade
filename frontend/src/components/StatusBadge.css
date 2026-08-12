@@ -1,24 +1,39 @@
-.badge {
-  display: inline-block;
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  font-size: 0.75rem;
-  color: var(--text-muted);
+/* Estado en versaleta ancha con una marca cuadrada delante. Sin píldora: el
+   color y la marca ya separan el estado del resto, y una cápsula alrededor de
+   cada fila convierte la lista en un tablero de etiquetas. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-stretch: 118%;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   white-space: nowrap;
+  color: var(--slate);
 }
 
-.badge--running {
-  color: var(--accent);
-  border-color: var(--accent);
+.status__mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: currentColor;
+  flex-shrink: 0;
 }
 
-.badge--completed {
-  color: var(--success);
-  border-color: var(--success);
+.status--flow {
+  color: var(--flow);
 }
 
-.badge--error {
-  color: var(--danger);
-  border-color: var(--danger);
+.status--done {
+  color: var(--done);
+}
+
+.status--warn {
+  color: var(--warn);
+}
+
+.status--fail {
+  color: var(--fail);
 }

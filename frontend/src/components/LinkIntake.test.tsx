@@ -1,10 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
-import AddLinksModal from './AddLinksModal'
+import LinkIntake from './LinkIntake'
 
 test('parses newline-separated URLs and calls onSubmit', () => {
   const onSubmit = vi.fn()
-  render(<AddLinksModal onSubmit={onSubmit} onClose={() => {}} />)
+  render(<LinkIntake onSubmit={onSubmit} />)
 
   fireEvent.change(screen.getByLabelText('Enlaces'), {
     target: { value: 'https://x/a.zip\nhttps://x/b.zip\n\nhttps://x/c.zip' },
@@ -15,12 +15,12 @@ test('parses newline-separated URLs and calls onSubmit', () => {
 })
 
 test('disables submit when no urls entered', () => {
-  render(<AddLinksModal onSubmit={vi.fn()} onClose={() => {}} />)
+  render(<LinkIntake onSubmit={vi.fn()} />)
   expect(screen.getByRole('button', { name: 'Analizar' })).toBeDisabled()
 })
 
 test('disables submit when the textarea holds only whitespace', () => {
-  render(<AddLinksModal onSubmit={vi.fn()} onClose={() => {}} />)
+  render(<LinkIntake onSubmit={vi.fn()} />)
 
   fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: '  \n\n   \n' } })
 
@@ -31,7 +31,7 @@ test('disables submit when the textarea holds only whitespace', () => {
 
 test('drops duplicate URLs before submitting', () => {
   const onSubmit = vi.fn()
-  render(<AddLinksModal onSubmit={onSubmit} onClose={() => {}} />)
+  render(<LinkIntake onSubmit={onSubmit} />)
 
   fireEvent.change(screen.getByLabelText('Enlaces'), {
     target: { value: 'https://x/a.zip\nhttps://x/a.zip\nhttps://x/b.zip' },
@@ -42,13 +42,26 @@ test('drops duplicate URLs before submitting', () => {
   expect(screen.getByText(/1 enlace duplicado/)).toBeInTheDocument()
 })
 
-test('closes on cancel and on Escape', () => {
-  const onClose = vi.fn()
-  render(<AddLinksModal onSubmit={vi.fn()} onClose={onClose} />)
+test('submits with the keyboard shortcut', () => {
+  const onSubmit = vi.fn()
+  render(<LinkIntake onSubmit={onSubmit} />)
 
-  fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
-  expect(onClose).toHaveBeenCalledTimes(1)
+  const field = screen.getByLabelText('Enlaces')
+  fireEvent.change(field, { target: { value: 'https://x/a.zip' } })
+  // Enter suelto tiene que seguir haciendo un salto de línea: el campo es una
+  // lista de URLs, no un buscador.
+  fireEvent.keyDown(field, { key: 'Enter' })
+  expect(onSubmit).not.toHaveBeenCalled()
 
-  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })
-  expect(onClose).toHaveBeenCalledTimes(2)
+  fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true })
+  expect(onSubmit).toHaveBeenCalledWith(['https://x/a.zip'])
+})
+
+test('says nothing about counts until something is pasted', () => {
+  render(<LinkIntake onSubmit={vi.fn()} />)
+
+  // "0 enlaces" sobre un campo vacío es ruido: lo que hace falta ahí es saber
+  // qué va a pasar después de pegar.
+  expect(screen.queryByText(/0 enlaces/)).not.toBeInTheDocument()
+  expect(screen.getByText(/elegís calidad/)).toBeInTheDocument()
 })

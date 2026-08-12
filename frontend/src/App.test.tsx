@@ -12,7 +12,8 @@ test('goes straight to the dashboard, with no login in the way', async () => {
 
   render(<App />)
 
-  // Un login era una barrera para usar el servicio: se entra y ya.
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument())
+  // Un login era una barrera para usar el servicio: se entra y ya, con el
+  // campo para pegar enlaces a la vista.
+  await waitFor(() => expect(screen.getByLabelText('Enlaces')).toBeInTheDocument())
   expect(screen.queryByRole('button', { name: 'Ingresar' })).not.toBeInTheDocument()
 })

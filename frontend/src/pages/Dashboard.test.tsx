@@ -45,12 +45,12 @@ test('refetches so status transitions appear without a reload', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  await vi.waitFor(() => expect(screen.getByText('running')).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByText('bajando')).toBeInTheDocument())
 
   // The WS feed only carries byte counts - queued -> running -> completed
   // would otherwise sit stale on screen until the user reloaded the page.
   await vi.advanceTimersByTimeAsync(4000)
-  await vi.waitFor(() => expect(screen.getByText('completed')).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByText('listo')).toBeInTheDocument())
   expect(list.mock.calls.length).toBeGreaterThan(1)
 })
 
@@ -66,29 +66,26 @@ test('pasting links creates a crawl job and opens the tray', async () => {
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Agregar enlaces' }))
-  fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: 'http://x/a.zip' } })
+  fireEvent.change(await screen.findByLabelText('Enlaces'), { target: { value: 'http://x/a.zip' } })
   fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
 
-  // El modal ya no crea un paquete: ahora abre el análisis y el usuario
-  // confirma qué baja.
+  // Pegar no crea un paquete: abre el análisis y el usuario confirma qué baja.
   await waitFor(() => expect(create).toHaveBeenCalledWith('http://x/a.zip'))
   expect(await screen.findByText('a.zip')).toBeInTheDocument()
 })
 
-test('keeps the modal open and shows why when the crawl job fails to create', async () => {
+test('keeps the pasted links on screen and shows why when the crawl job fails to create', async () => {
   vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([])
   vi.spyOn(crawlApi, 'createCrawlJob').mockRejectedValue(new Error('Carpeta de destino no escribible'))
   stubSocket()
 
   render(<Dashboard />)
-  fireEvent.click(await screen.findByRole('button', { name: 'Agregar enlaces' }))
-  fireEvent.change(screen.getByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
+  fireEvent.change(await screen.findByLabelText('Enlaces'), { target: { value: 'https://x/a.zip' } })
   fireEvent.click(screen.getByRole('button', { name: 'Analizar' }))
 
-  // Closing the modal here would throw away the URLs the user just pasted.
+  // Cambiar de pantalla acá tiraría las URLs que el usuario acaba de pegar.
   expect(await screen.findByText('Carpeta de destino no escribible')).toBeInTheDocument()
-  expect(screen.getByRole('dialog')).toBeInTheDocument()
+  expect(screen.getByLabelText('Enlaces')).toHaveValue('https://x/a.zip')
 })
 
 test('maps the pause control to the status the API accepts', async () => {
@@ -144,7 +141,7 @@ test('opens and closes the settings view', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Configuración' }))
 
   fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
-  expect(await screen.findByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument()
+  expect(await screen.findByLabelText('Enlaces')).toBeInTheDocument()
 })
 
 test('falls back to the list when the open package disappears', async () => {
@@ -160,6 +157,73 @@ test('falls back to the list when the open package disappears', async () => {
   expect(screen.getByRole('button', { name: 'Volver' })).toBeInTheDocument()
 
   await vi.advanceTimersByTimeAsync(4000)
-  await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Agregar enlaces' })).toBeInTheDocument())
+  await vi.waitFor(() => expect(screen.getByLabelText('Enlaces')).toBeInTheDocument())
 })
 
+
+test('deleting asks in the app, not in a browser popup', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const remove = vi.spyOn(packagesApi, 'deletePackage').mockResolvedValue(undefined)
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }))
+
+  // El diálogo nombra el paquete y aclara qué NO se pierde: "eliminar" suena a
+  // que borra el archivo bajado, y no lo hace.
+  const dialog = await screen.findByRole('dialog')
+  expect(dialog).toHaveTextContent('Pkg 1')
+  expect(dialog).toHaveTextContent(/se queda donde está/)
+  expect(remove).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Quitar' }))
+  await waitFor(() => expect(remove).toHaveBeenCalledWith('p1'))
+})
+
+test('backing out of the delete dialog deletes nothing', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const remove = vi.spyOn(packagesApi, 'deletePackage').mockResolvedValue(undefined)
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Eliminar' }))
+  fireEvent.keyDown(await screen.findByRole('dialog'), { key: 'Escape' })
+
+  // Escape cierra, como en cualquier diálogo del sistema que este reemplaza.
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  expect(remove).not.toHaveBeenCalled()
+})
+
+test('renaming carries the current name in and sends the trimmed one out', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const rename = vi.spyOn(packagesApi, 'renamePackage').mockResolvedValue(pkg)
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Renombrar' }))
+
+  // Entra escrito el nombre actual: renombrar suele ser retocar, no empezar
+  // de cero.
+  const field = await screen.findByLabelText('Nombre del paquete')
+  expect(field).toHaveValue('Pkg 1')
+
+  fireEvent.change(field, { target: { value: '  Backrooms  ' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Guardar nombre' }))
+
+  await waitFor(() => expect(rename).toHaveBeenCalledWith('p1', 'Backrooms'))
+})
+
+test('an empty name cannot be submitted', async () => {
+  vi.spyOn(packagesApi, 'listPackages').mockResolvedValue([pkg])
+  const rename = vi.spyOn(packagesApi, 'renamePackage').mockResolvedValue(pkg)
+  stubSocket()
+
+  render(<Dashboard />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Renombrar' }))
+  fireEvent.change(await screen.findByLabelText('Nombre del paquete'), { target: { value: '   ' } })
+
+  // La API lo rechaza; el botón muerto lo dice antes de viajar.
+  expect(screen.getByRole('button', { name: 'Guardar nombre' })).toBeDisabled()
+  fireEvent.keyDown(screen.getByLabelText('Nombre del paquete'), { key: 'Enter' })
+  expect(rename).not.toHaveBeenCalled()
+})

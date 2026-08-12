@@ -1,0 +1,87 @@
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  /* Fijo y no tokenizado: es el fondo del canal visto a través del agua, y
+     tiene que oscurecer tanto el tema claro como el oscuro. */
+  background: rgba(6, 19, 22, 0.55);
+  animation: modal-wash 0.18s ease-out;
+}
+
+.modal__panel {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  gap: 0 1.1rem;
+  width: 100%;
+  max-width: 30rem;
+  padding: 1.4rem;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  box-shadow: 0 18px 50px rgba(6, 19, 22, 0.3);
+  animation: modal-rise 0.18s ease-out;
+}
+
+/* El mismo riel de la app, acá pintado del color de lo que se va a hacer:
+   caudal si es una edición, óxido si algo se va a perder. */
+.modal__rail {
+  border-radius: 1px;
+  background: linear-gradient(to bottom, var(--flow-lit), var(--flow));
+}
+
+.modal__rail--fail {
+  background: var(--fail);
+}
+
+.modal__body {
+  min-width: 0;
+}
+
+.modal__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-stretch: 112%;
+}
+
+.modal__text {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 0.88rem;
+  color: var(--slate);
+}
+
+.modal__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.modal__field input {
+  background: var(--ground);
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 1.4rem;
+}
+
+@keyframes modal-wash {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}

@@ -1,5 +1,13 @@
+/* La columna por la que baja todo. Angosta a propósito: la vista es una
+   lista de cosas que caen, y una columna ancha rompe esa lectura. */
 .app {
-  max-width: 60rem;
+  max-width: 62rem;
   margin: 0 auto;
-  padding: 1.5rem 1rem 3rem;
+  padding: 2.75rem 1.5rem 5rem;
+}
+
+@media (max-width: 40rem) {
+  .app {
+    padding: 1.5rem 1rem 3rem;
+  }
 }

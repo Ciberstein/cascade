@@ -40,7 +40,8 @@ test('renders package name, status, and aggregate progress', () => {
   render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={noop} />)
 
   expect(screen.getByText('My package')).toBeInTheDocument()
-  expect(screen.getByText('running')).toBeInTheDocument()
+  // El estado se muestra en el idioma de la interfaz, no como lo nombra la API.
+  expect(screen.getByText('bajando')).toBeInTheDocument()
   // aggregate: (400 + 500) / (1000 + 500) = 60%
   expect(screen.getByText('60%')).toBeInTheDocument()
 })
@@ -190,22 +191,16 @@ test('deleting says the downloaded file is kept', () => {
   expect(onDelete).toHaveBeenCalledWith('pkg-1')
 })
 
-test('renaming asks for the new name and skips an empty one', () => {
+test('renaming only announces the intention', () => {
   const onRename = vi.fn()
-  const prompt = vi.spyOn(window, 'prompt')
 
   render(<PackageRow package={pkg} onPause={noop} onResume={noop} onCancel={noop} onDelete={noop} onRename={onRename} />)
 
-  prompt.mockReturnValue('   ')
   fireEvent.click(screen.getByRole('button', { name: 'Renombrar' }))
-  // La API rechaza un nombre vacío; no vale la pena viajar para que falle.
-  expect(onRename).not.toHaveBeenCalled()
 
-  prompt.mockReturnValue('  Backrooms  ')
-  fireEvent.click(screen.getByRole('button', { name: 'Renombrar' }))
-  expect(onRename).toHaveBeenCalledWith('pkg-1', 'Backrooms')
-
-  prompt.mockRestore()
+  // Preguntar el nombre le toca al Dashboard, que es donde viven los diálogos.
+  // La fila no abre nada por su cuenta.
+  expect(onRename).toHaveBeenCalledWith('pkg-1')
 })
 
 test('a finished package can still be renamed and deleted', () => {

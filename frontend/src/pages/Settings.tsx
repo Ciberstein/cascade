@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSettings, updateSettings } from '../api/settings'
+import Masthead from '../components/Masthead'
 import type { AppSettings } from '../types'
 import './Settings.css'
 
@@ -15,7 +16,8 @@ const BOUNDS: Record<NumericKey, { min: number; max?: number }> = {
   max_concurrent_crawls: { min: 1, max: 20 },
 }
 
-type NumericKey = 'max_concurrent_downloads' | 'chunks_per_file' | 'max_speed_kbps' | 'max_concurrent_crawls'
+type NumericKey =
+  'max_concurrent_downloads' | 'chunks_per_file' | 'max_speed_kbps' | 'max_concurrent_crawls'
 
 export default function Settings({ onClose }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -49,13 +51,16 @@ export default function Settings({ onClose }: Props) {
 
   if (!settings) {
     return (
-      <div className="settings">
+      <>
+        <Masthead>
+          <button onClick={onClose}>Volver</button>
+        </Masthead>
         {error ? (
-          <p className="settings__error" role="alert">
+          <p className="notice" role="alert">
             {error}
           </p>
         ) : null}
-      </div>
+      </>
     )
   }
 
@@ -83,80 +88,103 @@ export default function Settings({ onClose }: Props) {
   }
 
   return (
-    <form className="settings" onSubmit={handleSubmit}>
-      <h1 className="settings__title">Configuración</h1>
+    <>
+      {/* Sin "Volver" arriba: de acá se sale por Cancelar o por Guardar, y dos
+          salidas que hacen cosas distintas invitan a perder cambios. */}
+      <Masthead />
 
-      <NumberField
-        id="max-concurrent"
-        label="Descargas simultáneas"
-        field="max_concurrent_downloads"
-        value={numeric.max_concurrent_downloads}
-        onChange={setNumeric}
-      />
-
-      <NumberField
-        id="max-crawls"
-        label="Análisis simultáneos"
-        field="max_concurrent_crawls"
-        value={numeric.max_concurrent_crawls}
-        onChange={setNumeric}
-      />
-
-      <NumberField
-        id="chunks-per-file"
-        label="Chunks por archivo"
-        field="chunks_per_file"
-        value={numeric.chunks_per_file}
-        onChange={setNumeric}
-      />
-
-      <NumberField
-        id="max-speed"
-        label="Límite de velocidad (KB/s, 0 = sin límite)"
-        field="max_speed_kbps"
-        value={numeric.max_speed_kbps}
-        onChange={setNumeric}
-      />
-
-      {error && (
-        <p className="settings__error" role="alert">
-          {error}
+      <form onSubmit={handleSubmit}>
+        <h1 className="settings__title">Configuración</h1>
+        <p className="settings__lede">
+          Estos números gobiernan el motor entero, no solo tus descargas: mandan sobre todo lo que
+          el servidor esté bajando en este momento.
         </p>
-      )}
 
-      <div className="settings__actions">
-        <button type="button" onClick={onClose}>
-          Cancelar
-        </button>
-        <button type="submit" className="settings__primary" disabled={saving}>
-          Guardar
-        </button>
-      </div>
-    </form>
+        <NumberField
+          id="max-concurrent"
+          label="Descargas simultáneas"
+          hint="Cuántos archivos baja el servidor a la vez. El resto espera en cola."
+          field="max_concurrent_downloads"
+          value={numeric.max_concurrent_downloads}
+          onChange={setNumeric}
+        />
+
+        <NumberField
+          id="max-crawls"
+          label="Análisis simultáneos"
+          hint="Cuántas listas de enlaces se revisan a la vez antes de encolar nada."
+          field="max_concurrent_crawls"
+          value={numeric.max_concurrent_crawls}
+          onChange={setNumeric}
+        />
+
+        <NumberField
+          id="chunks-per-file"
+          label="Chunks por archivo"
+          hint="En cuántos pedazos se parte cada archivo para pedirlos en paralelo. Más pedazos suele ser más rápido, salvo que el hoster lo penalice."
+          field="chunks_per_file"
+          value={numeric.chunks_per_file}
+          onChange={setNumeric}
+        />
+
+        <NumberField
+          id="max-speed"
+          label="Límite de velocidad"
+          hint="En KB/s, repartido entre todas las descargas. 0 es sin límite."
+          field="max_speed_kbps"
+          value={numeric.max_speed_kbps}
+          onChange={setNumeric}
+        />
+
+        {error && (
+          <p className="notice settings__error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="settings__actions">
+          <button type="button" onClick={onClose}>
+            Cancelar
+          </button>
+          <button type="submit" className="primary" disabled={saving}>
+            Guardar
+          </button>
+        </div>
+      </form>
+    </>
   )
 }
 
 interface NumberFieldProps {
   id: string
   label: string
+  /** Qué hace el número. La etiqueta nombra; esto explica. */
+  hint: string
   field: NumericKey
   value: string
   onChange: React.Dispatch<React.SetStateAction<Record<NumericKey, string>>>
 }
 
-function NumberField({ id, label, field, value, onChange }: NumberFieldProps) {
+function NumberField({ id, label, hint, field, value, onChange }: NumberFieldProps) {
   const { min, max } = BOUNDS[field]
   return (
     <div className="settings__field">
-      <label htmlFor={id}>{label}</label>
+      <label className="settings__label" htmlFor={id}>
+        {label}
+      </label>
       <input
         id={id}
+        className="settings__input"
         type="number"
         min={min}
         max={max}
         value={value}
+        aria-describedby={`${id}-hint`}
         onChange={(e) => onChange((prev) => ({ ...prev, [field]: e.target.value }))}
       />
+      <p className="settings__hint" id={`${id}-hint`}>
+        {hint}
+      </p>
     </div>
   )
 }

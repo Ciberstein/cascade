@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCrawlJob, promoteResults } from '../api/crawl'
+import Masthead from '../components/Masthead'
 import StatusBadge from '../components/StatusBadge'
 import { formatBytes } from '../format'
 import type { CrawlJob } from '../types'
@@ -80,82 +81,139 @@ export default function LinkGrabber({ jobId, onDone, onBack }: Props) {
   }
 
   return (
-    <form className="grabber" onSubmit={handleSubmit}>
-      <div className="grabber__header">
-        <button type="button" onClick={onBack}>
-          Volver
-        </button>
-        {job && <StatusBadge status={job.status} />}
-      </div>
+    <>
+      {/* Fuera del form a propósito: un <button> sin type dentro de un form lo
+          envía, y "Volver" encolaría el paquete. */}
+      <Masthead>
+        <button onClick={onBack}>Volver</button>
+      </Masthead>
 
-      <h1 className="grabber__title">Enlaces encontrados</h1>
+      <form onSubmit={handleSubmit}>
+        <ol className="stages">
+          <li>pegar</li>
+          <li className="stages__arrow" aria-hidden="true">
+            →
+          </li>
+          <li className="stages__step--now" aria-current="step">
+            elegir
+          </li>
+          <li className="stages__arrow" aria-hidden="true">
+            →
+          </li>
+          <li>recibir</li>
+        </ol>
 
-      {error && (
-        <p className="grabber__error" role="alert">
-          {error}
+        <h1 className="grabber__title">Elegí qué se descarga</h1>
+        <p className="grabber__lede">
+          Esto es lo que hay detrás de los enlaces que pegaste. Destildá lo que no quieras y, en los
+          videos, elegí con qué calidad bajarlos.
         </p>
-      )}
 
-      {!finished && <p className="grabber__pending">Buscando qué hay detrás de los enlaces…</p>}
+        {error && (
+          <p className="notice grabber__error" role="alert">
+            {error}
+          </p>
+        )}
 
-      {job && job.results.length > 0 && (
-        <ul className="grabber__list">
-          {job.results.map((result) => (
-            <li className="grabber__row" key={result.id}>
-              <input
-                type="checkbox"
-                id={`r-${result.id}`}
-                aria-label={result.filename}
-                checked={selected.has(result.id)}
-                disabled={result.status !== 'ok'}
-                onChange={() => toggle(result.id)}
-              />
-              <label className="grabber__name" htmlFor={`r-${result.id}`} title={result.url}>
-                {result.filename}
-              </label>
-              {result.variants.length > 0 ? (
-                <select
-                  className="grabber__quality"
-                  aria-label={`Calidad de ${result.filename}`}
-                  value={quality[result.id] ?? result.variants[0].id}
-                  onChange={(e) => setQuality((prev) => ({ ...prev, [result.id]: e.target.value }))}
+        {!finished && <p className="grabber__pending">Buscando qué hay detrás de los enlaces…</p>}
+
+        {/* Un job que murió dejaba la pantalla en silencio: sin la lista y sin
+            el "Buscando…", no quedaba nada que explicara la lista vacía. */}
+        {job?.status === 'error' && (
+          <p className="notice grabber__error" role="alert">
+            {job.error_message ?? 'La búsqueda no terminó. Probá de nuevo con esos enlaces.'}
+          </p>
+        )}
+
+        {job && job.results.length > 0 && (
+          <ul className="grabber__list">
+            {job.results.map((result) => {
+              const on = selected.has(result.id)
+              return (
+                <li
+                  className={`result${on ? ' result--on' : ''}${result.status === 'ok' ? '' : ' result--dead'}`}
+                  key={result.id}
                 >
-                  {result.variants.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.label}
-                      {v.size ? ` · ${formatBytes(v.size)}` : ''}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <span className="grabber__size">{formatBytes(result.size)}</span>
-              )}
-              <span className="grabber__hoster">{result.hoster}</span>
-              <StatusBadge status={result.status} />
-              {result.error_message && <span className="grabber__why">{result.error_message}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
+                  <input
+                    type="checkbox"
+                    className="result__check"
+                    id={`r-${result.id}`}
+                    aria-label={result.filename}
+                    checked={on}
+                    disabled={result.status !== 'ok'}
+                    onChange={() => toggle(result.id)}
+                  />
 
-      {finished && job?.results.length === 0 && (
-        <p className="grabber__pending">No se encontró ningún archivo detrás de esos enlaces.</p>
-      )}
+                  <div className="result__body">
+                    <div className="result__head">
+                      <label className="result__name" htmlFor={`r-${result.id}`} title={result.url}>
+                        {result.filename}
+                      </label>
+                      <StatusBadge status={result.status} kind="search" />
+                    </div>
 
-      <div className="grabber__footer">
-        <div className="grabber__field">
-          <label htmlFor="pkg-name">Nombre del paquete</label>
-          <input
-            id="pkg-name"
-            placeholder="Paquete sin nombre"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
+                    <div className="result__meta">
+                      <span>{result.hoster}</span>
+                      {result.variants.length > 0 ? (
+                        <select
+                          className="result__quality"
+                          aria-label={`Calidad de ${result.filename}`}
+                          value={quality[result.id] ?? result.variants[0].id}
+                          onChange={(e) =>
+                            setQuality((prev) => ({
+                              ...prev,
+                              [result.id]: e.target.value,
+                            }))
+                          }
+                        >
+                          {result.variants.map((v) => (
+                            <option key={v.id} value={v.id}>
+                              {v.label}
+                              {v.size ? ` · ${formatBytes(v.size)}` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span>{formatBytes(result.size)}</span>
+                      )}
+                      {result.error_message && (
+                        <span className="result__why">{result.error_message}</span>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        {finished && job?.results.length === 0 && (
+          <p className="grabber__pending">No se encontró ningún archivo detrás de esos enlaces.</p>
+        )}
+
+        <div className="grabber__foot">
+          <div className="grabber__field">
+            <label className="eyebrow" htmlFor="pkg-name">
+              Nombre del paquete
+            </label>
+            <input
+              id="pkg-name"
+              placeholder="Paquete sin nombre"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className="grabber__confirm">
+            <span className="grabber__tally">
+              {selected.size} de {job?.results.length ?? 0}
+            </span>
+            <button type="submit" className="primary" disabled={selected.size === 0 || submitting}>
+              Agregar a la cola
+            </button>
+          </div>
         </div>
-        <button type="submit" className="grabber__primary" disabled={selected.size === 0 || submitting}>
-          Agregar a la cola
-        </button>
-      </div>
-    </form>
+      </form>
+    </>
   )
 }
