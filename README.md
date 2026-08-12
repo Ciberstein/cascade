@@ -1,174 +1,176 @@
 # Cascade
 
-Pegás un enlace y recibís el archivo. El servidor lo baja por vos —con varias
-conexiones en paralelo, reanudando si se corta, resolviendo el enlace real
-detrás de la página— y te lo entrega al navegador. Después borra su copia.
+Paste a link and get the file. The server downloads it for you — over several
+connections at once, resuming if it drops, resolving the real link behind the
+page — and hands it to your browser. Then it deletes its copy.
 
-Esa última parte es la idea entera: el servidor es un lugar de paso, no un
-depósito. No hay carpeta que administrar ni archivos acumulándose en un disco
-ajeno.
+That last part is the whole idea: the server is a place to pass through, not a
+warehouse. There is no folder to administer and no files piling up on someone
+else's disk.
 
-Tampoco hay login. Se entra y se usa.
+There is no login either. You arrive and you use it.
 
 ---
 
-## Cómo funciona para quien lo usa
+## How it works for the person using it
 
-**Pegar → elegir → recibir.**
+**Paste → choose → receive.**
 
-1. Pegás una o varias URLs, una por línea.
-2. Cascade mira qué hay detrás de cada una: si es un archivo directo, si es
-   una carpeta abierta con veinte archivos adentro, si es un video con seis
-   calidades. Te muestra lo que encontró.
-3. Destildás lo que no querés, elegís calidad donde haya, y confirmás.
-4. El archivo baja al servidor y, apenas termina, tu navegador se lo lleva
-   solo a tu carpeta de descargas.
+1. You paste one or more URLs, one per line.
+2. Cascade looks at what sits behind each one: a direct file, an open directory
+   with twenty files inside, a video with six qualities. It shows you what it
+   found.
+3. You untick what you don't want, pick a quality where there is one, and
+   confirm.
+4. The file downloads to the server and, the moment it finishes, your browser
+   pulls it into your downloads folder on its own.
 
-El historial vive en tu navegador, atado a un token anónimo. Registrarse es
-**opcional** y sirve para una sola cosa: conservar esa lista y verla desde otro
-dispositivo.
+The history lives in your browser, tied to an anonymous token. Registering is
+**optional** and buys one thing: keeping that list and seeing it from another
+device.
 
-## Levantarlo
+## Running it
 
-Requiere Docker.
+Requires Docker.
 
 ```bash
-cp .env.example .env      # poné una contraseña real en POSTGRES_PASSWORD
+cp .env.example .env      # put a real password in POSTGRES_PASSWORD
 docker compose up -d --build
 ```
 
-Queda en **http://127.0.0.1:8080**.
+It comes up on **http://127.0.0.1:8080**.
 
-Escucha solo en localhost a propósito. Como no hay login, exponerlo en la red
-le da a cualquiera la capacidad de encolar descargas y de cambiar los límites
-del motor. Para abrirlo hay que decidirlo:
+It listens on localhost only, on purpose. Since there is no login, exposing it
+to the network gives anyone the ability to queue downloads and change the
+engine limits. Opening it up has to be a decision:
 
 ```bash
-BIND_ADDRESS=0.0.0.0    # en el .env
+BIND_ADDRESS=0.0.0.0    # in .env
 ```
 
-Antes de hacer eso, leé [Lo que todavía no está](#lo-que-todavía-no-está).
+Read [What isn't there yet](#what-isnt-there-yet) before you do.
 
-## Qué hay adentro
+## What's inside
 
-Tres contenedores: `frontend` (nginx sirviendo la SPA y haciendo de proxy al
-backend, así el WebSocket no necesita CORS), `backend` (FastAPI) y `postgres`.
+Three containers: `frontend` (nginx serving the SPA and proxying to the
+backend, so the WebSocket needs no CORS), `backend` (FastAPI) and `postgres`.
 
-El backend corre tres bucles en paralelo sobre el mismo evento de parada:
+The backend runs three loops in parallel over one shared stop event:
 
-| Bucle | Qué hace |
+| Loop | What it does |
 |---|---|
-| scheduler | toma items en cola y los baja en chunks paralelos |
-| crawl | resuelve los enlaces pegados en archivos concretos |
-| sweep | libera del disco lo ya entregado y lo que nadie retiró |
+| scheduler | takes queued items and downloads them in parallel chunks |
+| crawl | expands the pasted links into concrete files |
+| sweep | frees what has been delivered, and what nobody came back for |
 
-**El motor de descarga** parte cada archivo en chunks y los pide con `Range`.
-Guarda el avance en la base recién después de vaciar el buffer a disco, así un
-reinicio a mitad de camino reanuda desde un byte que realmente está escrito y
-no desde uno que solo estaba en memoria. Hay límite de velocidad global por
-token bucket.
+**The download engine** splits each file into chunks and requests them with
+`Range`. It records progress in the database only after flushing the buffer to
+disk, so a restart midway resumes from a byte that is genuinely written rather
+than one that was only in memory. There is a global speed limit via a token
+bucket.
 
-**Las calidades separadas** (el 1080p de YouTube viene en dos pistas) se bajan
-como dos items hermanos y se unen con `ffmpeg -c copy`, sin recodificar. La
-pista de audio nunca se muestra como una descarga aparte: es un medio, no algo
-que el usuario pidió.
+**Separate qualities** (YouTube's 1080p arrives as two tracks) are downloaded as
+two sibling items and joined with `ffmpeg -c copy`, without re-encoding. The
+audio track is never shown as a separate download: it is a means, not something
+the user asked for.
 
-**El borrado** tiene dos disparadores: 30 minutos después de que retirás el
-archivo —no cero, porque si tu descarga se corta al 90% querés poder
-reintentar— y un techo de 24 horas para lo que nadie fue a buscar.
+**Deletion** has two triggers: 30 minutes after you retrieve the file — not
+zero, because if your download breaks at 90% you want to retry — and a 24-hour
+ceiling for anything nobody came for.
 
-### Estructura
+### Layout
 
 ```
 backend/app/
   api/          endpoints: /packages /crawl-jobs /settings /account
   engine/       scheduler, chunker, downloader, rate limiter, merge
-  crawler/      expansión de enlaces con recursión acotada
-  plugins/      un archivo por hoster
-  ws/           feed de progreso en vivo
+  crawler/      link expansion with bounded recursion
+  plugins/      one file per hoster
+  ws/           live progress feed
 frontend/src/
-  components/   FlowRail (el medidor), Masthead, diálogos, filas
+  components/   FlowRail (the meter), Masthead, dialogs, rows
   pages/        Dashboard, LinkGrabber, PackageDetail, Settings, Account
-docs/superpowers/   specs y planes de las dos fases
+docs/superpowers/   specs and plans for both phases
 ```
 
-Las tipografías se sirven desde `frontend/public/fonts`, no desde un CDN: una
-herramienta cuyo argumento es que no guarda nada tuyo no puede filtrar cada
-visita a un tercero.
+The fonts are served from `frontend/public/fonts`, not a CDN: a tool whose
+argument is that it keeps nothing of yours cannot leak every visit to a third
+party.
 
 ## Plugins
 
-Cada hoster es un archivo en `backend/app/plugins/` que expone `PLUGIN`. El
-registro los descubre solo al arrancar: agregar un hoster es agregar un
-archivo, no editar una lista.
+Each hoster is a file in `backend/app/plugins/` exposing `PLUGIN`. The registry
+discovers them at startup: adding a hoster means adding a file, not editing a
+list.
 
-| Plugin | Cubre |
+| Plugin | Covers |
 |---|---|
-| `ytdlp` | ~1750 sitios de video, con sus calidades |
-| `open_directory` | índices de Apache/nginx, recursivo hasta 3 niveles |
-| `pixeldrain` | archivos y álbumes |
-| `direct` | cualquier URL; va último y cierra la lista |
+| `ytdlp` | ~1750 video sites, with their qualities |
+| `open_directory` | Apache/nginx indexes, recursive up to 3 levels |
+| `pixeldrain` | files and albums |
+| `direct` | any URL; goes last and closes the list |
 
-El contrato son dos operaciones. `crawl(url)` corre al pegar el enlace y
-devuelve qué archivos hay detrás. `resolve(url, format_id)` corre justo antes
-de bajar, porque las URLs directas de la mayoría de los hosters vencen en
-minutos y una resuelta al pegar ya estaría muerta al llegar a la cola.
+The contract is two operations. `crawl(url)` runs when the link is pasted and
+returns which files sit behind it. `resolve(url, format_id)` runs just before
+downloading, because most hosters' direct URLs expire within minutes and one
+resolved at paste time would already be dead by the time it reached the queue.
 
-Los fallos se declaran con tipos —`LinkDead`, `UnsupportedLink`,
-`RateLimited`— y cada uno lleva a una decisión distinta: descartar, seguir
-probando con otro plugin, o reagendar para más tarde. Todo lo demás se envuelve
-y se acota por timeout: un plugin colgado no se queda con un slot para siempre.
+Failures are declared with types — `LinkDead`, `UnsupportedLink`, `RateLimited`
+— and each leads to a different decision: discard, keep trying other plugins,
+or reschedule for later. Everything else is wrapped and bounded by a timeout: a
+hung plugin does not keep a slot forever.
 
-## Configuración
+## Configuration
 
-Del entorno (`.env`):
+From the environment (`.env`):
 
-| Variable | Por defecto | Para qué |
+| Variable | Default | What for |
 |---|---|---|
-| `POSTGRES_PASSWORD` | `cascade` | cambiala |
-| `BIND_ADDRESS` | `127.0.0.1` | `0.0.0.0` lo abre a la red |
+| `POSTGRES_PASSWORD` | `cascade` | change it |
+| `BIND_ADDRESS` | `127.0.0.1` | `0.0.0.0` opens it to the network |
 
-Desde la UI, en Configuración —y valen para el motor entero, no por usuario—:
-descargas simultáneas (3), análisis simultáneos (5), chunks por archivo (4) y
-límite de velocidad en KB/s (sin límite).
+From the UI, under Settings — and these apply to the whole engine, not per
+user: simultaneous downloads (3), simultaneous checks (5), chunks per file (4)
+and a speed limit in KB/s (unlimited).
 
-Los tiempos de retención se ajustan por entorno:
-`RETRIEVAL_GRACE_MINUTES` (30) y `MAX_RETENTION_HOURS` (24).
+Retention times are tuned through the environment:
+`RETRIEVAL_GRACE_MINUTES` (30) and `MAX_RETENTION_HOURS` (24).
 
-## Desarrollo
+## Development
 
 ```bash
 # backend
 cd backend
 pip install -e ".[dev]"
-pytest                     # los tests marcados 'live' quedan fuera
-pytest -m live             # esos golpean sitios reales; corren a mano
+pytest                     # tests marked 'live' are excluded
+pytest -m live             # those hit real sites; run them by hand
 
 # frontend
 cd frontend
 npm install
 npm test
-npm run dev                # servidor de Vite, proxy al backend en :8000
+npm run dev                # Vite dev server, proxying to the backend on :8000
 ```
 
-Los tests del backend corren sobre SQLite en memoria y producción es Postgres;
-tenelo presente al tocar SQL crudo o tipos de columna, que es justo donde esa
-diferencia se cobra.
+The backend tests run on in-memory SQLite while production is Postgres; keep
+that in mind when touching raw SQL or column types, which is exactly where the
+difference bites.
 
-La base se migra sola al arrancar el contenedor (`alembic upgrade head`).
+The database migrates itself when the container starts (`alembic upgrade head`).
 
-## Lo que todavía no está
+## What isn't there yet
 
-Honestidad sobre los bordes, porque el objetivo declarado es que esto sea una
-herramienta pública y todavía no lo es:
+Honesty about the edges, because the stated goal is for this to be a public
+tool and it isn't one yet:
 
-- **SSRF.** El servidor busca la URL que le den. Nada le impide hoy pedir
-  `http://169.254.169.254/` o cualquier cosa de la red interna. Es el motivo
-  principal por el que el bind está en localhost.
-- **Sin cuotas.** Nadie limita cuánto encola un visitante ni cuánto disco usa.
-- **Los ajustes del motor son globales** y cualquiera que llegue a la UI puede
-  cambiarlos. Deberían ser de operador.
+- **SSRF.** The server fetches whatever URL it is given. Nothing today stops it
+  requesting `http://169.254.169.254/` or anything else on the internal
+  network. It is the main reason the bind address is localhost.
+- **No quotas.** Nobody limits how much a visitor queues or how much disk they
+  use.
+- **Engine settings are global** and anyone reaching the UI can change them.
+  They should be operator-only.
 
-## Licencia
+## License
 
-MIT. Ver [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
