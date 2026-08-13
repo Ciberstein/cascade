@@ -30,6 +30,9 @@ export default function Settings({ onClose }: Props) {
     max_speed_kbps: '',
     max_concurrent_crawls: '',
   })
+  // Only ever sent, never received: the API reports whether a jar exists, not
+  // what it says.
+  const [cookies, setCookies] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -77,7 +80,10 @@ export default function Settings({ onClose }: Props) {
     setError(null)
     setSaving(true)
     try {
-      await updateSettings({ ...settings, ...parsed })
+      // Left out entirely when untouched, so saving the numbers doesn't wipe
+      // a jar this screen never showed.
+      const jar = cookies.trim() === '' ? {} : { hoster_cookies: cookies }
+      await updateSettings({ ...settings, ...parsed, ...jar })
       onClose()
     } catch (err) {
       // Stays open so the rejected values are still on screen to correct.
@@ -135,6 +141,30 @@ export default function Settings({ onClose }: Props) {
           value={numeric.max_speed_kbps}
           onChange={setNumeric}
         />
+
+        <div className="settings__field settings__field--wide">
+          <label className="settings__label" htmlFor="cookies">
+            Cookies for blocked sites
+          </label>
+          <p className="settings__hint" id="cookies-hint">
+            Some sites refuse servers outright — YouTube answers "Sign in to confirm you're not a
+            bot" to anything hosted in a datacenter. A cookie jar in Netscape format answers that.
+            Use a throwaway account: this service has no login, so anyone who finds it downloads as
+            whoever these cookies belong to.
+            {settings.has_cookies
+              ? ' A jar is stored. Paste a new one to replace it; the current one is never shown.'
+              : ' Nothing stored right now.'}
+          </p>
+          <textarea
+            id="cookies"
+            className="settings__jar"
+            rows={4}
+            placeholder={settings.has_cookies ? 'Paste a new jar to replace the stored one' : '# Netscape HTTP Cookie File'}
+            aria-describedby="cookies-hint"
+            value={cookies}
+            onChange={(e) => setCookies(e.target.value)}
+          />
+        </div>
 
         {error && (
           <p className="notice settings__error" role="alert">

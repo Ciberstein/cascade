@@ -24,6 +24,7 @@ from app.engine.scheduler import (
 from app.plugins.base import DirectLink, PluginError, UnsupportedLink
 from app.retention import sweep
 from app.plugins.registry import call_resolve, registry
+from app.plugins.ytdlp import set_cookies
 from app.settings_store import read_settings
 from app.ws.routes import router as ws_router
 
@@ -84,10 +85,14 @@ async def _effective_limits(db: "AsyncSession") -> tuple[int, int]:
     row = await read_settings(db)
     if row is None:
         limiter.set_rate(0)  # fresh install: no row yet, so no cap
+        set_cookies(None)
         return _settings.max_concurrent_downloads, _settings.chunks_per_file
 
     if limiter.rate_bytes_per_second != row.max_speed_kbps * 1024:
         limiter.set_rate(row.max_speed_kbps * 1024)
+    # Same reasoning as the speed limit: pushed from here so a jar pasted into
+    # the UI reaches the next tick instead of waiting for a restart.
+    set_cookies(row.hoster_cookies)
     return row.max_concurrent_downloads, row.chunks_per_file
 
 
@@ -138,6 +143,10 @@ async def _scheduler_loop(stop: asyncio.Event | None = None) -> None:
 
 async def _effective_crawl_limit(db: "AsyncSession") -> int:
     row = await read_settings(db)
+    # Applied on this loop too, and not only on the scheduler's: crawling is
+    # where a hoster decides whether to talk to us at all, so a jar that only
+    # reached the download side would arrive one step too late.
+    set_cookies(row.hoster_cookies if row else None)
     if row is None:
         return _settings.max_concurrent_crawls
     return row.max_concurrent_crawls

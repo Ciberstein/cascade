@@ -101,6 +101,10 @@ class SettingsResponse(BaseModel):
     chunks_per_file: int
     max_speed_kbps: int
     max_concurrent_crawls: int
+    #: Whether a cookie jar is configured - never the jar itself. Anyone can
+    #: read this endpoint, and a jar is a live credential: returning it would
+    #: hand every visitor the account it belongs to.
+    has_cookies: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -110,6 +114,10 @@ class UpdateSettingsRequest(BaseModel):
     chunks_per_file: int = Field(ge=1, le=16)
     max_speed_kbps: int = Field(ge=0)
     max_concurrent_crawls: int = Field(ge=1, le=20)
+    #: None leaves the stored jar alone, so a client that doesn't know about
+    #: this field cannot wipe it by saving the other settings. An empty string
+    #: is the explicit "remove it".
+    hoster_cookies: str | None = None
 
 
 class CreateCrawlJobRequest(BaseModel):

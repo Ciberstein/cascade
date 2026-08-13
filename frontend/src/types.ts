@@ -34,6 +34,10 @@ export interface Package {
 }
 
 export interface AppSettings {
+  /** Whether a cookie jar is stored. Never the jar: the API won't return it. */
+  has_cookies?: boolean
+  /** Only sent. Omitted leaves the stored jar alone; '' clears it. */
+  hoster_cookies?: string
   max_concurrent_downloads: number
   chunks_per_file: number
   /** 0 means unlimited. */

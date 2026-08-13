@@ -17,6 +17,7 @@ import asyncio
 import logging
 import os
 import tempfile
+from contextlib import suppress
 from typing import Any, Callable
 from urllib.parse import urlsplit, urlunsplit
 
@@ -59,40 +60,55 @@ _YDL_OPTS = {
 #:     youtube:player_client=tv,web_safari
 _EXTRACTOR_ARGS_ENV = "YTDLP_EXTRACTOR_ARGS"
 
-#: A Netscape-format cookie jar, pasted in whole.
+#: The jar currently in force, and the file it was written to.
 #:
-#: Cookies authenticate the request, which is what the block is actually
-#: asking for. Use a throwaway Google account, never a real one: this service
-#: has no login, so whoever finds the URL is downloading as that account, and
-#: it is that account that gets suspended if someone abuses it. They also
-#: expire every few weeks and have to be replaced by hand.
-_COOKIES_ENV = "YTDLP_COOKIES"
-
-#: Where the jar was materialised. yt-dlp wants a path, and the value arrives
-#: as text because platforms hand out variables, not files.
+#: yt-dlp wants a path; the value arrives as text because it is edited in the
+#: app and stored in the settings row - not in the environment, because these
+#: expire every few weeks and replacing one must not need a redeploy.
+_cookie_source: str | None = None
 _cookie_path: str | None = None
 
 
-def _cookie_file() -> str | None:
-    """Writes the configured cookie jar to a file and returns its path.
+def set_cookies(jar: str | None) -> None:
+    """Puts a cookie jar in force, writing it where yt-dlp can read it.
 
-    Written once and reused: yt-dlp reads it on every call, and rewriting it
-    per request would be pointless disk churn. Changing the variable restarts
-    the process on every platform worth the name, so the cache cannot go stale
-    without the file going with it.
+    Called from the polling loops with whatever the settings row holds, so a
+    jar pasted into the UI reaches the next crawl without a restart. Rewrites
+    only when the text actually changed: yt-dlp reads the file on every call,
+    and rewriting it per tick would be disk churn for nothing.
     """
-    global _cookie_path
-    raw = os.environ.get(_COOKIES_ENV, "").strip()
-    if not raw:
-        return None
-    if _cookie_path is not None and os.path.exists(_cookie_path):
-        return _cookie_path
+    global _cookie_source, _cookie_path
+    jar = (jar or "").strip() or None
 
-    handle, path = tempfile.mkstemp(prefix="cascade-cookies-", suffix=".txt")
-    with os.fdopen(handle, "w", encoding="utf-8") as jar:
-        jar.write(raw + "\n")
-    _cookie_path = path
-    return path
+    unchanged = jar == _cookie_source
+    still_there = _cookie_path is None or os.path.exists(_cookie_path)
+    if unchanged and still_there:
+        return
+
+    if jar is None:
+        if _cookie_path is not None:
+            with suppress(OSError):
+                os.remove(_cookie_path)
+            _cookie_path = None
+    else:
+        handle, path = tempfile.mkstemp(prefix="cascade-cookies-", suffix=".txt")
+        with os.fdopen(handle, "w", encoding="utf-8") as jar_file:
+            # Trailing newline: the Netscape format is line-oriented and some
+            # parsers drop a final line that doesn't have one.
+            jar_file.write(jar + "\n")
+        # Written to a new file and swapped, rather than edited in place: an
+        # extraction running right now holds the old path and has to keep
+        # reading something valid until it finishes.
+        previous, _cookie_path = _cookie_path, path
+        if previous is not None:
+            with suppress(OSError):
+                os.remove(previous)
+
+    _cookie_source = jar
+
+
+def _cookie_file() -> str | None:
+    return _cookie_path
 
 
 #: Player clients to walk through when the default one is refused.
@@ -248,8 +264,7 @@ class YtDlpHoster:
         if proxy:
             opts["proxy"] = proxy
         # Cookies authenticate the request, which is what a bot check is
-        # actually asking for. They do not replace a decent address - they are
-        # the cheaper thing to try first.
+        # actually asking for. Configured in the app, not the environment.
         cookies = _cookie_file()
         if cookies:
             opts["cookiefile"] = cookies

@@ -57,3 +57,18 @@
   gap: 0.75rem;
   margin-top: 2rem;
 }
+
+/* The jar is a wall of text, so it gets the full width instead of the narrow
+   right-hand column the numbers share. */
+.settings__field--wide {
+  grid-template-columns: 1fr;
+}
+
+.settings__jar {
+  grid-column: 1;
+  width: 100%;
+  resize: vertical;
+  font-family: var(--data);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}

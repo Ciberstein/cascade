@@ -1,7 +1,14 @@
-"""A proxy has to cover resolution and the bytes, or it covers nothing."""
+"""A proxy has to cover resolution and the bytes, or it covers nothing.
+
+The cookie jar sits next to it because both answer the same question - whether
+the hoster will talk to this server at all - and both have to be changeable
+while it runs.
+"""
 
 import app.plugins.ytdlp as ytdlp_mod
 from app.engine.http import PROXY_ENV, outbound_client, proxy_url
+
+JAR = "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tvalue"
 
 
 def test_no_proxy_configured_means_a_direct_client(monkeypatch):
@@ -33,20 +40,54 @@ async def test_the_client_follows_redirects_by_default(monkeypatch):
         assert client.follow_redirects is True
 
 
-def test_cookies_are_materialised_once_and_reused(monkeypatch, tmp_path):
+def _forget_jar(monkeypatch):
+    monkeypatch.setattr(ytdlp_mod, "_cookie_source", None)
     monkeypatch.setattr(ytdlp_mod, "_cookie_path", None)
-    monkeypatch.setenv("YTDLP_COOKIES", "# Netscape HTTP Cookie File\nfoo\tbar")
 
+
+def test_the_jar_is_written_once_and_left_alone_until_it_changes(monkeypatch):
+    _forget_jar(monkeypatch)
+
+    ytdlp_mod.set_cookies(JAR)
     first = ytdlp_mod._cookie_file()
-    second = ytdlp_mod._cookie_file()
+    ytdlp_mod.set_cookies(JAR)
 
-    # yt-dlp reads the jar on every call; rewriting it per request would be
-    # disk churn for nothing.
-    assert first == second
-    assert "Netscape" in open(first, encoding="utf-8").read()
+    # The loops push the stored jar on every tick. Rewriting it each time would
+    # be disk churn for a file yt-dlp only ever reads.
+    assert ytdlp_mod._cookie_file() == first
+    with open(first, encoding="utf-8") as jar:
+        assert "Netscape" in jar.read()
 
 
-def test_no_cookies_configured_stays_out_of_the_way(monkeypatch):
-    monkeypatch.setattr(ytdlp_mod, "_cookie_path", None)
-    monkeypatch.delenv("YTDLP_COOKIES", raising=False)
+def test_a_replaced_jar_lands_without_a_restart(monkeypatch):
+    _forget_jar(monkeypatch)
+
+    ytdlp_mod.set_cookies("old jar")
+    stale = ytdlp_mod._cookie_file()
+    ytdlp_mod.set_cookies("new jar")
+
+    # Cookies expire every few weeks; pasting a fresh one has to take effect on
+    # the next crawl, which is the whole reason this lives in the settings row
+    # rather than in the environment.
+    assert ytdlp_mod._cookie_file() != stale
+    with open(ytdlp_mod._cookie_file(), encoding="utf-8") as jar:
+        assert jar.read().strip() == "new jar"
+
+
+def test_clearing_the_jar_removes_the_file(monkeypatch):
+    _forget_jar(monkeypatch)
+
+    ytdlp_mod.set_cookies(JAR)
+    ytdlp_mod.set_cookies(None)
+
+    # A credential nobody is using any more has no business staying on disk.
+    assert ytdlp_mod._cookie_file() is None
+
+
+def test_whitespace_is_not_a_jar(monkeypatch):
+    # Clearing the textarea leaves a newline behind; that has to read as "no
+    # cookies" rather than as a jar with nothing in it, which yt-dlp would
+    # accept and then send no cookies at all while claiming to be configured.
+    _forget_jar(monkeypatch)
+    ytdlp_mod.set_cookies("   \n  ")
     assert ytdlp_mod._cookie_file() is None

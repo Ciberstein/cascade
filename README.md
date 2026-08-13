@@ -152,10 +152,15 @@ to override the search entirely.
 When every client is refused, the address is the problem and no code change
 fixes it. Two ways out, both configured rather than built in:
 
-| Variable | What it does |
-|---|---|
-| `OUTBOUND_PROXY` | Routes resolution *and* the bytes through a proxy. A residential one is what actually solves a datacenter block. |
-| `YTDLP_COOKIES` | A Netscape cookie jar, pasted whole. Cheaper to try, and often enough on its own. |
+**Cookies**, pasted into Settings in the running app. A jar in Netscape format
+authenticates the request, which is what the block is asking for. It lives in
+the settings row rather than the environment because these expire every few
+weeks: replacing one is routine maintenance and must not need a redeploy. The
+API reports only whether a jar is stored, never its contents.
+
+**A proxy**, through `OUTBOUND_PROXY`. A residential one is what actually
+solves a datacenter block. It stays an environment variable because it is
+infrastructure - which network path the server takes - like `DOWNLOAD_ROOT`.
 
 The proxy covers both layers on purpose: applied to only one, resolution
 succeeds from an address the site tolerates and the download then runs from the
@@ -185,12 +190,12 @@ From the environment (`.env`):
 | `POSTGRES_PASSWORD` | `cascade` | change it |
 | `BIND_ADDRESS` | `127.0.0.1` | `0.0.0.0` opens it to the network |
 | `OUTBOUND_PROXY` | empty | proxy for every outbound fetch |
-| `YTDLP_COOKIES` | empty | cookie jar for sites that demand one |
 | `YTDLP_EXTRACTOR_ARGS` | empty | pins a yt-dlp player client |
 
 From the UI, under Settings — and these apply to the whole engine, not per
 user: simultaneous downloads (3), simultaneous checks (5), chunks per file (4)
-and a speed limit in KB/s (unlimited).
+and a speed limit in KB/s (unlimited). The cookie jar for blocked sites is
+there too.
 
 Retention times are tuned through the environment:
 `RETRIEVAL_GRACE_MINUTES` (30) and `MAX_RETENTION_HOURS` (24).

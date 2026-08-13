@@ -103,6 +103,21 @@ class GlobalSettings(Base):
     chunks_per_file: Mapped[int] = mapped_column(default=4)
     max_speed_kbps: Mapped[int] = mapped_column(default=0)
     max_concurrent_crawls: Mapped[int] = mapped_column(default=5)
+    #: Netscape cookie jar handed to the hoster plugins.
+    #:
+    #: Here rather than in the environment because these expire every few weeks
+    #: and replacing one must not need a redeploy. Never returned by the API -
+    #: see SettingsResponse.
+    hoster_cookies: Mapped[str | None] = mapped_column(Text, default=None)
+
+    @property
+    def has_cookies(self) -> bool:
+        """What the API is allowed to say about the jar: that there is one.
+
+        A property and not a column for the same reason as DownloadItem's: it
+        is derived, and storing it separately would let the two disagree.
+        """
+        return bool(self.hoster_cookies)
 
 
 class CrawlJob(Base):
