@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.engine.downloader import FLUSH_INTERVAL_SECONDS
 from app.engine.item_runner import run_download_item
 from app.engine.merge import merge_ready_groups, part_suffix
+from app.engine.transcode import convert_ready_items
 from app.engine.progress import ThrottledBroadcaster
 from app.paths import ensure_within, safe_filename
 from app.engine.rate_limiter import limiter
@@ -365,6 +366,10 @@ async def run_pending(
     # Before the verdict: a freshly merged group no longer has an audio part,
     # and judging the package earlier would see it as incomplete.
     await merge_ready_groups(db)
+    # After merging: a merged file can itself be owed a transcode, and the
+    # verdict below must not call a package finished while ffmpeg still owes it
+    # the file the user actually asked for.
+    await convert_ready_items(db)
 
     for package_id in package_ids:
         await _apply_verdict(db, package_id)

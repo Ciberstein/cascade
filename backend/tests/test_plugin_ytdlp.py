@@ -320,8 +320,14 @@ def test_a_video_with_no_compatible_audio_is_not_offered():
     aac = {"format_id": "140", "url": "https://cdn/a", "protocol": "https", "ext": "m4a",
            "vcodec": "none", "acodec": "mp4a", "abr": 128}
 
-    # Ofrecerla llevaría a bajar dos pistas para que ffmpeg falle al final.
-    assert _variants([vp9, aac]) == []
+    offered = _variants([vp9, aac])
+
+    # Offering that pairing would download two tracks so ffmpeg could fail at
+    # the end: AAC does not go inside a WebM.
+    assert [v for v in offered if v.height is not None] == []
+    # The audio on its own is a different matter - it needs no container it
+    # cannot have, so it stays on the menu.
+    assert [v.id for v in offered] == ["audio-140"]
 
 
 def test_extractor_args_take_the_syntax_yt_dlp_documents():
@@ -430,3 +436,37 @@ async def test_being_blocked_everywhere_says_so_instead_of_echoing_yt_dlp(monkey
     # logs. The message now carries the answer.
     assert "blocked on all" in str(caught.value)
     assert "address is the problem" in str(caught.value)
+
+
+def test_the_soundtrack_is_offered_on_its_own():
+    from app.plugins.ytdlp import _variants
+
+    progressive = {"format_id": "18", "url": "https://cdn/p", "protocol": "https", "ext": "mp4",
+                   "vcodec": "avc1", "acodec": "mp4a", "height": 360}
+    good_audio = {"format_id": "251", "url": "https://cdn/a2", "protocol": "https", "ext": "webm",
+                  "vcodec": "none", "acodec": "opus", "abr": 160}
+    poor_audio = {"format_id": "249", "url": "https://cdn/a1", "protocol": "https", "ext": "webm",
+                  "vcodec": "none", "acodec": "opus", "abr": 50}
+
+    offered = _variants([progressive, good_audio, poor_audio])
+
+    # Last in the list: a different intent, not a lesser quality. Among the
+    # resolutions it would read as "worse than 360p".
+    audio = offered[-1]
+    assert audio.label == "Audio only (mp3)"
+    assert audio.video_format == "251"  # the best track, not the first found
+    assert audio.ext == "mp3"
+    assert audio.postprocess == "mp3"
+    # No second track to fetch and nothing to merge: it is one small download.
+    assert audio.needs_merge is False
+
+
+def test_nothing_to_extract_offers_no_audio_option():
+    from app.plugins.ytdlp import _variants
+
+    progressive = {"format_id": "18", "url": "https://cdn/p", "protocol": "https", "ext": "mp4",
+                   "vcodec": "avc1", "acodec": "mp4a", "height": 360}
+
+    # Some sites publish only muxed files. Offering "audio only" there would
+    # promise a small download and deliver the whole video.
+    assert [v for v in _variants([progressive]) if v.postprocess] == []

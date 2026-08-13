@@ -95,6 +95,7 @@ async def _run_one_job(db: AsyncSession, db_lock: asyncio.Lock, job: CrawlJob) -
                                     "needs_merge": v.needs_merge,
                                     "ext": v.ext,
                                     "video_format": v.video_format,
+                                    "postprocess": v.postprocess,
                                     "audio_format": v.audio_format,
                                 }
                                 for v in found.variants

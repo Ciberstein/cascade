@@ -61,6 +61,10 @@ class DownloadItem(Base):
     #: "video" or "audio" within the group. The audio part is not shown to the
     #: user: it is a means, not a download they asked for.
     merge_role: Mapped[str | None] = mapped_column(String(10), default=None)
+    #: A step still owed once the bytes are down ("mp3"), or None. A column and
+    #: not a flag in memory: the process can die between the last byte landing
+    #: and ffmpeg finishing, and the work still owed has to survive that.
+    postprocess: Mapped[str | None] = mapped_column(String(16), default=None)
 
     package: Mapped["Package"] = relationship(back_populates="items")
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="item", cascade="all, delete-orphan")

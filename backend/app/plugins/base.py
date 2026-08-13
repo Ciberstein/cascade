@@ -24,6 +24,9 @@ class Variant:
     #: extension: a .webm with AAC audio inside cannot be written, and neither
     #: can an .mp4 with VP9.
     ext: str | None = None
+    #: A step the engine runs once the bytes are down, or None for the usual
+    #: case of taking the file as it arrives. "mp3" means transcode to audio.
+    postprocess: str | None = None
 
     @property
     def needs_merge(self) -> bool:

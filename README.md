@@ -106,6 +106,13 @@ two sibling items and joined with `ffmpeg -c copy`, without re-encoding. The
 audio track is never shown as a separate download: it is a means, not something
 the user asked for.
 
+**The soundtrack on its own** is offered as a quality like any other, last in
+the list because it is a different intent rather than a lesser resolution.
+Cascade fetches the audio track the site already publishes for its higher
+qualities - a fraction of the video's size - and transcodes it to mp3. Not the
+native m4a or opus: someone who wants the audio of a video wants a file their
+car stereo will play.
+
 **Deletion** has two triggers: 30 minutes after you retrieve the file — not
 zero, because if your download breaks at 90% you want to retry — and a 24-hour
 ceiling for anything nobody came for.

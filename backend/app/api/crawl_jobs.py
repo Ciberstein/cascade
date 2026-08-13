@@ -148,6 +148,9 @@ async def promote(
                 # seeking their own ranges. The result is one file with both
                 # downloads interleaved and both items marked "completed".
                 filename=filename,
+                # Carried from the chosen quality: "audio only" is a normal
+                # download plus a conversion once the bytes are down.
+                postprocess=(variant or {}).get("postprocess"),
                 total_size=variant.get("size") if variant else found.size,
                 hoster=found.hoster,
                 status="queued",

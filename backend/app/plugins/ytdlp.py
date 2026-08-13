@@ -498,15 +498,47 @@ def _variants(formats: list[dict[str, Any]]) -> list[Variant]:
         key = height if height is not None else str(fmt.get("format_id"))
         if height is not None and height not in _OFFERED_HEIGHTS:
             continue
-        previo = candidates.get(key)
-        if previo is None or (previo.needs_merge and not variant.needs_merge):
+        previous = candidates.get(key)
+        if previous is None or (previous.needs_merge and not variant.needs_merge):
             candidates[key] = variant
 
     with_height = [candidates[h] for h in _OFFERED_HEIGHTS if h in candidates]
     # Those with no declared height (Facebook publishes "sd"/"hd" that way) go
     # afterwards, in reverse of yt-dlp's order, which runs worst to best.
     without_height = [v for k, v in candidates.items() if not isinstance(k, int)]
-    return with_height + list(reversed(without_height))
+
+    ordered = with_height + list(reversed(without_height))
+    audio_only = _audio_variant(audios)
+    # Last: it is a different intent, not a lesser quality, and putting it
+    # among the resolutions would read as "worse than 240p".
+    return ordered + ([audio_only] if audio_only else [])
+
+
+def _audio_variant(audios: list[dict[str, Any]]) -> Variant | None:
+    """The soundtrack on its own, transcoded to mp3.
+
+    Offered from the loose audio tracks the site already publishes for its
+    higher qualities, so it costs one small download instead of pulling a video
+    down to throw the picture away.
+
+    mp3 and not the native m4a or opus: someone asking for the audio of a video
+    wants a file their car stereo will play. The transcode is seconds of CPU
+    for a track that is a fraction of the video's size.
+    """
+    if not audios:
+        return None
+
+    best = max(audios, key=lambda f: f.get("abr") or f.get("tbr") or 0)
+    return Variant(
+        id=f"audio-{best['format_id']}",
+        label="Audio only (mp3)",
+        video_format=str(best["format_id"]),
+        audio_format=None,
+        height=None,
+        size=best.get("filesize") or best.get("filesize_approx") or None,
+        ext="mp3",
+        postprocess="mp3",
+    )
 
 
 #: Which audio can share a container with which video. Putting AAC in a WebM,
