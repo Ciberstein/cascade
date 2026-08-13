@@ -4,6 +4,8 @@ from collections.abc import Callable
 
 import httpx
 
+from app.engine.http import outbound_client
+
 from app.engine.rate_limiter import RateLimiter
 
 #: How often the output file is flushed and a resumable offset reported.
@@ -61,10 +63,10 @@ async def download_chunk(
 
     for attempt in range(max_retries):
         try:
-            # Same reason as in the probe: without following redirects, a
-            # link pointing at a CDN fails. The Range travels in the request
-            # and httpx forwards it to the destination.
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            # Redirects are followed and the proxy applied by the shared
+            # factory: the address the bytes come from has to match the one
+            # that resolved the link, or the site sees two different callers.
+            async with outbound_client() as client:
                 # Range goes last on purpose: the chunk engine computes it,
                 # and a plugin overriding it would silently corrupt the file.
                 request_headers = {**(headers or {}), "Range": f"bytes={range_start}-{end}"}

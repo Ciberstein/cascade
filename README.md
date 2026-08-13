@@ -149,6 +149,23 @@ one worked. Only a block moves on to the next; a video that is simply gone is
 reported as gone. `YTDLP_EXTRACTOR_ARGS` pins a specific client when you want
 to override the search entirely.
 
+When every client is refused, the address is the problem and no code change
+fixes it. Two ways out, both configured rather than built in:
+
+| Variable | What it does |
+|---|---|
+| `OUTBOUND_PROXY` | Routes resolution *and* the bytes through a proxy. A residential one is what actually solves a datacenter block. |
+| `YTDLP_COOKIES` | A Netscape cookie jar, pasted whole. Cheaper to try, and often enough on its own. |
+
+The proxy covers both layers on purpose: applied to only one, resolution
+succeeds from an address the site tolerates and the download then runs from the
+one it doesn't, surfacing as a broken link rather than a block.
+
+Use a throwaway Google account for the cookies, never a real one. This service
+has no login, so whoever finds the URL downloads as that account — and it is
+that account that gets suspended if someone abuses it. They also expire every
+few weeks.
+
 The contract is two operations. `crawl(url)` runs when the link is pasted and
 returns which files sit behind it. `resolve(url, format_id)` runs just before
 downloading, because most hosters' direct URLs expire within minutes and one
@@ -167,6 +184,9 @@ From the environment (`.env`):
 |---|---|---|
 | `POSTGRES_PASSWORD` | `cascade` | change it |
 | `BIND_ADDRESS` | `127.0.0.1` | `0.0.0.0` opens it to the network |
+| `OUTBOUND_PROXY` | empty | proxy for every outbound fetch |
+| `YTDLP_COOKIES` | empty | cookie jar for sites that demand one |
+| `YTDLP_EXTRACTOR_ARGS` | empty | pins a yt-dlp player client |
 
 From the UI, under Settings — and these apply to the whole engine, not per
 user: simultaneous downloads (3), simultaneous checks (5), chunks per file (4)

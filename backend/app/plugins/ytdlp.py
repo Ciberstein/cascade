@@ -16,9 +16,11 @@ reason.
 import asyncio
 import logging
 import os
+import tempfile
 from typing import Any, Callable
 from urllib.parse import urlsplit, urlunsplit
 
+from app.engine.http import proxy_url
 from app.plugins.base import (
     CrawledFile,
     Variant,
@@ -56,6 +58,42 @@ _YDL_OPTS = {
 #: Takes yt-dlp's own --extractor-args syntax, e.g.
 #:     youtube:player_client=tv,web_safari
 _EXTRACTOR_ARGS_ENV = "YTDLP_EXTRACTOR_ARGS"
+
+#: A Netscape-format cookie jar, pasted in whole.
+#:
+#: Cookies authenticate the request, which is what the block is actually
+#: asking for. Use a throwaway Google account, never a real one: this service
+#: has no login, so whoever finds the URL is downloading as that account, and
+#: it is that account that gets suspended if someone abuses it. They also
+#: expire every few weeks and have to be replaced by hand.
+_COOKIES_ENV = "YTDLP_COOKIES"
+
+#: Where the jar was materialised. yt-dlp wants a path, and the value arrives
+#: as text because platforms hand out variables, not files.
+_cookie_path: str | None = None
+
+
+def _cookie_file() -> str | None:
+    """Writes the configured cookie jar to a file and returns its path.
+
+    Written once and reused: yt-dlp reads it on every call, and rewriting it
+    per request would be pointless disk churn. Changing the variable restarts
+    the process on every platform worth the name, so the cache cannot go stale
+    without the file going with it.
+    """
+    global _cookie_path
+    raw = os.environ.get(_COOKIES_ENV, "").strip()
+    if not raw:
+        return None
+    if _cookie_path is not None and os.path.exists(_cookie_path):
+        return _cookie_path
+
+    handle, path = tempfile.mkstemp(prefix="cascade-cookies-", suffix=".txt")
+    with os.fdopen(handle, "w", encoding="utf-8") as jar:
+        jar.write(raw + "\n")
+    _cookie_path = path
+    return path
+
 
 #: Player clients to walk through when the default one is refused.
 #:
@@ -204,6 +242,17 @@ class YtDlpHoster:
         url = canonical_url(url) if self._extract is None else url
 
         opts = dict(_YDL_OPTS)
+        # The same address that resolves the link has to fetch the bytes, so
+        # the proxy comes from the shared factory the engine uses too.
+        proxy = proxy_url()
+        if proxy:
+            opts["proxy"] = proxy
+        # Cookies authenticate the request, which is what a bot check is
+        # actually asking for. They do not replace a decent address - they are
+        # the cheaper thing to try first.
+        cookies = _cookie_file()
+        if cookies:
+            opts["cookiefile"] = cookies
         if flat:
             # List a playlist without resolving each video: the tray needs the
             # titles, not the final URLs, which expire anyway.

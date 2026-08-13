@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 import httpx
 
+from app.engine.http import outbound_client
+
 from app.engine.chunker import split_into_chunks
 from app.engine.downloader import FLUSH_INTERVAL_SECONDS, download_chunk
 from app.engine.rate_limiter import RateLimiter
@@ -18,10 +20,10 @@ class ItemResult:
 
 
 async def _probe(url: str, headers: dict[str, str] | None = None) -> tuple[int, bool]:
-    # follow_redirects: httpx doesn't follow them by default, and almost every
-    # real download link redirects to a CDN or a mirror. Without this a
-    # perfectly ordinary 301 ends up as "error" in the queue.
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+    # Shared factory: it follows redirects (almost every real download link
+    # goes through a CDN or a mirror) and routes through the proxy when one is
+    # configured.
+    async with outbound_client() as client:
         response = await client.head(url, headers=headers or {})
         response.raise_for_status()
 
